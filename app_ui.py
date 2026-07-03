@@ -1143,15 +1143,22 @@ with tab4:
         return zh if is_zh else ja
 
     # 1. 物理隔離：建立專屬於 Tab 4 的本地變數與檔案，與全域獨立
-    t4_file = "database_tab4.json"
-    t4_data = {}
-    
     try:
-        if os.path.exists(t4_file):
-            with open(t4_file, "r", encoding="utf-8") as f:
-                t4_data = json.load(f)
-    except:
-        t4_data = {}
+        # 使用你剛寫好的橋樑函式
+        sheet = get_sheet_by_tab("tab4")
+        raw_data = sheet.get_all_records()
+        # 整理成原本程式預期的 t4_data 結構
+        t4_data = {"inventory_sheets": {}}
+        for row in raw_data:
+            # 這裡的邏輯要依照你 Google Sheet 的欄位名稱調整
+            # 例如：如果你的 Sheet 有 sheet_id 這個欄位
+            s_id = row.get("sheet_id", "default")
+            if s_id not in t4_data["inventory_sheets"]:
+                t4_data["inventory_sheets"][s_id] = {"info": {}, "items": []}
+            t4_data["inventory_sheets"][s_id]["items"].append(row)
+    except Exception as e:
+        st.error(f"雲端讀取失敗: {e}")
+        t4_data = {"inventory_sheets": {}}
 
     if not isinstance(t4_data, dict):
         t4_data = {}
@@ -1161,10 +1168,22 @@ with tab4:
     # 2. 專屬存檔安全函式
     def _tab4_isolated_save(data_to_save):
         try:
-            with open(t4_file, "w", encoding="utf-8") as f:
-                json.dump(data_to_save, f, ensure_ascii=False, indent=4)
-        except:
-            pass
+            sheet = get_sheet_by_tab("tab4")
+            # 攤平資料：將字典轉回 DataFrame
+            all_rows = []
+            for s_id, content in data_to_save["inventory_sheets"].items():
+                for item in content["items"]:
+                    item["sheet_id"] = s_id  # 確保 sheet_id 有寫入
+                    all_rows.append(item)
+            
+            df_to_save = pd.DataFrame(all_rows)
+            
+            # 清空並寫入 (先寫表頭，再寫資料)
+            sheet.clear()
+            if not df_to_save.empty:
+                sheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
+        except Exception as e:
+            st.error(f"雲端存檔失敗: {e}")
 
     # 1. 導入新實體盤點名冊
     st.subheader(_("1. 盤點明細", "1. 棚卸データ"))
