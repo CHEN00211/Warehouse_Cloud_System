@@ -1114,9 +1114,6 @@ with tab3:
             st.caption("-")
     else:
         st.caption("-")
-# ==========================================
-# PART 6: Tab4 庫存盤點管理 (完整完整結構版)
-# ==========================================
 with tab4:
     # --- 只在 Tab4 範圍內初始化 ---
     if "t4_form_key" not in st.session_state:
@@ -1202,36 +1199,24 @@ with tab4:
                             "actual_stock": 0
                         })
                         
-            
-                    # 1. 執行保存動作
                     _tab4_isolated_save(t4_data)
                     st.session_state.t4_form_key += 1
-
-                    # --- [修改這裡] 設定清除請求旗標 ---
                     st.session_state["clear_t4_form"] = True
-                    # --------------------------------
-            
-                    # 2. 設定成功訊息到 session_state，這樣重整後才不會消失
                     st.session_state["msg_success"] = _(f"成功導入盤點明細：{inv_sheet_id}", f"棚卸明細 {inv_sheet_id} が登録されました")
-            
-                    # 3. 重新整理頁面來更新顯示
                     st.rerun()
-            
             except Exception as e:
-                # 如果發生錯誤，顯示錯誤訊息
                 st.error(f"{_('解析錯誤', '解析エラー')}: {str(e)}")
-            
-# --- 在你的程式碼「下方」或「頁面顯示的核心位置」，加上這一段來檢查是否有成功訊息 ---
-if "msg_success" in st.session_state and st.session_state["msg_success"]:
-    st.success(st.session_state["msg_success"])
-    # 顯示完一次後清除，避免下次重新整理又出現
-    st.session_state["msg_success"] = None        
-
-# 2. 選擇欲執行的盤點表單
-st.subheader(_("2. 選擇盤點表單", "2. 棚卸明細の選択"))
-sheet_options = list(t4_data["inventory_sheets"].keys())
     
-if sheet_options:
+    # 檢查是否有成功訊息
+    if "msg_success" in st.session_state and st.session_state["msg_success"]:
+        st.success(st.session_state["msg_success"])
+        st.session_state["msg_success"] = None
+
+    # 2. 選擇欲執行的盤點表單
+    st.subheader(_("2. 選擇盤點表單", "2. 棚卸明細の選択"))
+    sheet_options = list(t4_data["inventory_sheets"].keys())
+    
+    if sheet_options:
         sorted_sheets = sorted(sheet_options, reverse=True)
         
         col_select, col_delete = st.columns([4, 1])
@@ -1268,17 +1253,11 @@ if sheet_options:
             
             # PDA 條碼掃描通道
             st.markdown(f"### {_(' 掃描條碼', 'バーコードスキャン')}")
-            
-            # 【關鍵邏輯】：維持一個計數器，每次提交後將其增加，讓 Key 永遠變動，強制更新輸入框
             if f"scan_counter_{selected_sheet}" not in st.session_state:
                 st.session_state[f"scan_counter_{selected_sheet}"] = 0
             
             scan_input_key = f"pda_box_{selected_sheet}_{st.session_state[f'scan_counter_{selected_sheet}']}"
-            
-            scan_input = st.text_input(
-                _("請將游標停在此處並使用 PDA 刷條碼", "JANコードをスキャンしてください"),
-                key=scan_input_key
-            )
+            scan_input = st.text_input(_("請將游標停在此處並使用 PDA 刷條碼", "JANコードをスキャンしてください"), key=scan_input_key)
 
             if scan_input:
                 scanned_jan = str(scan_input).strip()
@@ -1296,18 +1275,15 @@ if sheet_options:
                     
                     input_results = {}
                     allow_submit = True 
-                    
                     if len(all_matches_indices) > 1:
                         st.markdown(_("偵測到此商品有複數貨位或效期組合，請在下方確認並輸入數量：", "複数のロケーションまたは賞味期限が検出されました。数量を入力してください："))
                     
                     for m_idx in all_matches_indices:
                         target_item = inventory_list[m_idx]
                         has_counted = target_item.get("is_counted", False)
-                        
                         with st.container(border=True):
                             if has_counted:
                                 st.error(_("提示：此商品之前已完成盤點！", "注意：この商品は既に棚卸完了しています！"))
-                            
                             col_det, col_warn = st.columns([3, 2])
                             with col_det:
                                 st.markdown(f"{_('貨位', 'ロケーション')}： `{target_item.get('location', '無')}`")
@@ -1327,22 +1303,16 @@ if sheet_options:
                         for idx_key, qty_val in input_results.items():
                             t4_data["inventory_sheets"][selected_sheet]["items"][idx_key]["actual_stock"] = qty_val
                             t4_data["inventory_sheets"][selected_sheet]["items"][idx_key]["is_counted"] = True
-                        
                         _tab4_isolated_save(t4_data)
-                        
-                        # 【更新邏輯】：增加計數器，下一次渲染時會使用全新的 Key
                         st.session_state[f"scan_counter_{selected_sheet}"] += 1
-                        
                         st.success(_("條碼資料已確認更新！", "データが更新されました！"))
                         st.rerun()
 
             # 3. 盤點進度動態清單
             st.markdown("---")
             st.markdown(f"### {_('盤點進度', '棚卸状況')}")
-            
             uncounted_list = []
             counted_list = []
-            
             for idx, item in enumerate(inventory_list):
                 row_data = {
                     _("條碼 (JAN)", "JANコード"): item.get("jan_code", ""),
@@ -1351,7 +1321,6 @@ if sheet_options:
                     _("有效期限", "賞味期限"): item.get("expiry", ""),
                     _("在庫數", "実在庫数"): item.get("stock", 0)
                 }
-                
                 if item.get("is_counted", False):
                     act_qty = item.get("actual_stock", 0)
                     row_data[_("盤點數", "実棚数")] = act_qty
@@ -1389,11 +1358,9 @@ if sheet_options:
                         "實際盤點數": item.get("actual_stock", 0) if is_cnt else _("未盤點", "未棚卸"),
                         "狀態": _("已盤點", "完了") if is_cnt else _("未盤點", "未完了")
                     })
-                
                 inv_excel_buffer = io.BytesIO()
                 with pd.ExcelWriter(inv_excel_buffer, engine="openpyxl") as writer:
                     pd.DataFrame(full_report).to_excel(writer, index=False, sheet_name="棚卸実績")
-                
                 st.download_button(
                     label=_("匯出 Excel", "Excel出力"), 
                     data=inv_excel_buffer.getvalue(),
@@ -1401,5 +1368,5 @@ if sheet_options:
                     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     key=f"inv_excel_download_t4_{selected_sheet}"
                 )
-else:
+    else:
         st.warning(_("目前系統中尚無任何盤點明細，請由上方區域導入您的第一張 CSV 盤點明細", "棚卸伝票がありません。上のフォームからインポートしてください。"))
