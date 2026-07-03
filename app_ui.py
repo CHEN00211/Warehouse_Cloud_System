@@ -5,8 +5,18 @@ import datetime
 import io
 import os
 import json
+import gspread
 
+# 確保只執行一次 set_page_config
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
+
+# 這是統一管理所有 Sheet 連線的核心函式
+def get_google_sheet(sheet_name):
+    # 對應你在 Streamlit Secrets 設定的名稱
+    creds = st.secrets["gcp_service_account"]
+    gc = gspread.service_account_from_dict(creds)
+    # 開啟你的 Google Sheets 檔案並選取指定工作表
+    return gc.open("Inventory_DB").worksheet(sheet_name)
 
 # ==========================================
 # 🛑【全域物理消滅】用 CSS 隱藏並自動關閉 Clear Cache 彈窗
