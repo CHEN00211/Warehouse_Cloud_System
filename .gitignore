@@ -1,0 +1,12 @@
+# 忽略 Python 編譯暫存檔
+__pycache__/
+*.pyc
+
+# 忽略環境設定或不需要的備份檔
+.env
+.DS_Store
+
+# 你的資料庫檔案（如果已經轉為使用 Google Sheets，這些就不需要上傳）
+inventory.db
+database.json
+database_tab4.json
