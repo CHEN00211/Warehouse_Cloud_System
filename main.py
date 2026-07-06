@@ -5,17 +5,17 @@ import gspread
 # 雲端資料庫管理員
 def load_db_from_sheets():
     try:
-        # 從 Google Sheet 讀取，注意 Sheet 名稱要對應您設好的 Inventory, Manifest, Counters
-        inv_data = get_google_sheet("Inventory").get_all_records()
-        man_data = get_google_sheet("Manifest").get_all_records()
-        count_data = get_google_sheet("Counters").get_all_records()
+        # 逐一讀取，看看卡在哪一頁
+        st.write("讀取 Inventory...")
+        inv = get_google_sheet("Inventory").get_all_records()
+        st.write("讀取 Manifest...")
+        man = get_google_sheet("Manifest").get_all_records()
+        st.write("讀取 Counters...")
+        cnt = get_google_sheet("Counters").get_all_records()
         
-        return {
-            "inventory": inv_data,
-            "manifest_by_order": {row["order_no"]: row for row in man_data} if man_data else {},
-            "daily_counters": {row["date"]: row["count"] for row in count_data} if count_data else {}
-        }
+        return { ... }
     except Exception as e:
+        st.error(f"錯誤位置: {e}")
         return {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 def save_data(db):
