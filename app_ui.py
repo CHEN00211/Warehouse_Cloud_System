@@ -1,7 +1,4 @@
-# 強制測試 secrets 是否存在
-if "gcp_service_account" not in st.secrets:
-    st.error("找不到 Secrets！請至 Streamlit Cloud 設定頁面填入 JSON 金鑰。")
-    st.stop() # 這裡會停止執行，讓您看到紅字錯誤
+
 import streamlit as st
 import pandas as pd
 import re
@@ -11,6 +8,10 @@ import os
 import json
 import gspread
 from main import load_db_from_sheets, save_data 
+# 強制測試 secrets 是否存在
+if "gcp_service_account" not in st.secrets:
+    st.error("找不到 Secrets！請至 Streamlit Cloud 設定頁面填入 JSON 金鑰。")
+    st.stop() # 這裡會停止執行，讓您看到紅字錯誤
 st.write("系統啟動中...")
 try:
     # 測試連線是否能在 5 秒內回應
