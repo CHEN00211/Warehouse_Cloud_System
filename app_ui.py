@@ -11,6 +11,14 @@ import os
 import json
 import gspread
 from main import load_db_from_sheets, save_data 
+st.write("系統啟動中...")
+try:
+    # 測試連線是否能在 5 秒內回應
+    test_sheet = get_google_sheet("Inventory")
+    st.write("Google Sheet 連線成功！")
+except Exception as e:
+    st.error(f"連線 Google Sheet 失敗: {e}")
+    st.stop()
 
 # 確保只執行一次 set_page_config
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
