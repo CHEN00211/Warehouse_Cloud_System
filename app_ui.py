@@ -87,41 +87,62 @@ components.html(
 
 
 # ==========================================
-# 💾 JSON 實體檔案強制持久化閘門 (全名統鎖版)
+# ☁️ Google Sheets 全雲端持久化閘門
 # ==========================================
-DB_FILE = "database.json"
 
-def save_data(data):
-    """【硬碟強制存檔】"""
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
+def load_db_from_sheets():
+    """【從 Google Sheets 讀取並重組資料結構】"""
+    try:
+        # 1. 讀取各分頁資料
+        inv_rows = get_google_sheet("Inventory").get_all_records()
+        man_rows = get_google_sheet("Manifest").get_all_records()
+        count_rows = get_google_sheet("Counters").get_all_records()
 
-def load_database_from_disk():
-    """【硬碟強制讀取】"""
-    default_structure = {
-        "inventory": [
-            {"jan_code": "4901234567890", "name_ja": "サントリー 伊右衛門 500ml", "lot_no": "LOT001", "expiry": "2026/12/31", "stock": 120}
-        ],
-        "manifest_by_order": {},
-        "daily_counters": {}
-    }
-    
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            try:
-                data = json.load(f)
-                if isinstance(data, dict):
-                    if "inventory" not in data: data["inventory"] = default_structure["inventory"]
-                    if "manifest_by_order" not in data: data["manifest_by_order"] = {}
-                    if "daily_counters" not in data: data["daily_counters"] = {}
-                    return data
-            except json.JSONDecodeError:
-                pass
-    return default_structure
+        # 2. 重組為程式所需的結構 (視您的資料關聯調整)
+        db = {
+            "inventory": inv_rows,
+            "manifest_by_order": {row["order_no"]: row for row in man_rows} if man_rows else {},
+            "daily_counters": {row["date"]: row["count"] for row in count_rows} if count_rows else {}
+        }
+        return db
+    except Exception as e:
+        st.error(f"雲端資料讀取失敗: {e}")
+        # 若讀取失敗，回傳預設結構以避免程式崩潰
+        return {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
-# 核心防禦：每次重整網頁，都強制從檔案去同步最新狀態
+def save_data(db):
+    """【將資料同步回對應的 Google Sheets 分頁】"""
+    try:
+        # 1. 儲存 Inventory
+        sheet_inv = get_google_sheet("Inventory")
+        sheet_inv.clear()
+        if db["inventory"]:
+            df_inv = pd.DataFrame(db["inventory"])
+            sheet_inv.update([df_inv.columns.values.tolist()] + df_inv.values.tolist())
+
+        # 2. 儲存 Manifest (將字典轉回列表格式寫入)
+        sheet_man = get_google_sheet("Manifest")
+        sheet_man.clear()
+        man_list = [{"order_no": k, **v} for k, v in db["manifest_by_order"].items()]
+        if man_list:
+            df_man = pd.DataFrame(man_list)
+            sheet_man.update([df_man.columns.values.tolist()] + df_man.values.tolist())
+
+        # 3. 儲存 Counters
+        sheet_count = get_google_sheet("Counters")
+        sheet_count.clear()
+        count_list = [{"date": k, "count": v} for k, v in db["daily_counters"].items()]
+        if count_list:
+            df_count = pd.DataFrame(count_list)
+            sheet_count.update([df_count.columns.values.tolist()] + df_count.values.tolist())
+            
+        st.toast("資料已同步至雲端")
+    except Exception as e:
+        st.error(f"雲端存檔失敗: {e}")
+
+# 核心防禦：每次重整，都強制從雲端同步最新狀態
 if "db" not in st.session_state:
-    st.session_state["db"] = load_database_from_disk()
+    st.session_state["db"] = load_db_from_sheets()
 
 db = st.session_state["db"]
 
