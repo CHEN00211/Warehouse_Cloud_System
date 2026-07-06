@@ -1148,23 +1148,29 @@ with tab4:
         # 使用你剛寫好的橋樑函式
         sheet = get_google_sheet("tab4")
         raw_data = sheet.get_all_records()
+        
         # 整理成原本程式預期的 t4_data 結構
         t4_data = {"inventory_sheets": {}}
         for row in raw_data:
-            # 這裡的邏輯要依照你 Google Sheet 的欄位名稱調整
-            # 例如：如果你的 Sheet 有 sheet_id 這個欄位
             s_id = row.get("sheet_id", "default")
             if s_id not in t4_data["inventory_sheets"]:
                 t4_data["inventory_sheets"][s_id] = {"info": {}, "items": []}
+            
+            # --- 關鍵修正：嚴格處理 is_counted ---
+            # 獲取值，預設為 False
+            val = row.get("is_counted", False)
+            
+            # 將各種可能的型別轉為布林值 (處理字串、空值、數字)
+            if isinstance(val, str):
+                row["is_counted"] = val.lower() in ['true', '1', 'yes']
+            else:
+                row["is_counted"] = bool(val)
+            
             t4_data["inventory_sheets"][s_id]["items"].append(row)
+            
     except Exception as e:
         st.error(f"雲端讀取失敗: {e}")
         t4_data = {"inventory_sheets": {}}
-
-    if not isinstance(t4_data, dict):
-        t4_data = {}
-    if "inventory_sheets" not in t4_data:
-        t4_data["inventory_sheets"] = {}
 
     # 2. 專屬存檔安全函式
     def _tab4_isolated_save(data_to_save):
