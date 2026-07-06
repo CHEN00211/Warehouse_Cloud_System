@@ -8,42 +8,34 @@ import os
 import json
 import gspread
 from main import load_db_from_sheets, save_data 
-# 強制測試 secrets 是否存在
+# 1. 第一優先：頁面設定 (絕對不能更動順序)
+st.set_page_config(page_title="到貨驗收系統", layout="wide")
+
+# 2. 定義連線函式 (先定義好，後面才能用)
+def get_google_sheet(sheet_name):
+    creds = st.secrets["gcp_service_account"]
+    gc = gspread.service_account_from_dict(creds)
+    return gc.open("Inventory_DB").worksheet(sheet_name)
+
+# 3. 檢查 Secrets 與連線測試
 if "gcp_service_account" not in st.secrets:
     st.error("找不到 Secrets！請至 Streamlit Cloud 設定頁面填入 JSON 金鑰。")
-    st.stop() # 這裡會停止執行，讓您看到紅字錯誤
+    st.stop()
+
 st.write("系統啟動中...")
 try:
-    # 測試連線是否能在 5 秒內回應
     test_sheet = get_google_sheet("Inventory")
     st.write("Google Sheet 連線成功！")
 except Exception as e:
     st.error(f"連線 Google Sheet 失敗: {e}")
     st.stop()
 
-# 確保只執行一次 set_page_config
-st.set_page_config(page_title="到貨驗收系統", layout="wide")
-
-# 這是統一管理所有 Sheet 連線的核心函式
-def get_google_sheet(sheet_name):
-    # 對應你在 Streamlit Secrets 設定的名稱
-    creds = st.secrets["gcp_service_account"]
-    gc = gspread.service_account_from_dict(creds)
-    # 開啟你的 Google Sheets 檔案並選取指定工作表
-    return gc.open("Inventory_DB").worksheet(sheet_name)
-    # 3. 【核心初始化：在這裡加上那段程式碼】
-# --- 在 app.py 找到這段，先把它們變成註解 ---
-# if "db" not in st.session_state:
-#     st.session_state["db"] = load_db_from_sheets()
-# db = st.session_state["db"]
-
-# 4. 接下來才是您的 UI 設定 (例如 tab1, tab2...)
+# 4. 接下來才是您的 UI
 tab1, tab2, tab3, tab4 = st.tabs(["Tab 1", "Tab 2", "Tab 3", "Tab 4"])
 
 with tab1:
-# 只在進入 Tab 1 時才載入
-    db = load_db_from_sheets()
-    st.write(db["inventory"])
+    st.write("這裡是 Tab 1")
+    # 之後再在這裡呼叫讀取資料的邏輯
 
 # ==========================================
 # 🛑【全域物理消滅】用 CSS 隱藏並自動關閉 Clear Cache 彈窗
