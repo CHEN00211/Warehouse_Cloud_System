@@ -1,27 +1,49 @@
-import json
-import os
+import streamlit as st
+import pandas as pd
+import gspread
 
-DB_FILE = "database.json"
+# 雲端資料庫管理員
+def load_db_from_sheets():
+    try:
+        # 從 Google Sheet 讀取，注意 Sheet 名稱要對應您設好的 Inventory, Manifest, Counters
+        inv_data = get_google_sheet("Inventory").get_all_records()
+        man_data = get_google_sheet("Manifest").get_all_records()
+        count_data = get_google_sheet("Counters").get_all_records()
+        
+        return {
+            "inventory": inv_data,
+            "manifest_by_order": {row["order_no"]: row for row in man_data} if man_data else {},
+            "daily_counters": {row["date"]: row["count"] for row in count_data} if count_data else {}
+        }
+    except Exception as e:
+        return {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
-# 預設資料庫（如果檔案不存在時使用）
-default_inventory = {
-    "4902750728837": {"name": "UHAグミサプリC 10日", "count": 25, "price": 380, "expiry": "2026-12-31"},
-    "4901330502880": {"name": "卡樂比薯條", "count": 45, "price": 150, "expiry": "2026-11-30"},
-    "4902102072618": {"name": "可口可樂 500ml", "count": 120, "price": 35, "expiry": "2026-09-15"}
-}
+def save_data(db):
+    try:
+        # 存入 Inventory
+        sheet_inv = get_google_sheet("Inventory")
+        sheet_inv.clear()
+        if db["inventory"]:
+            df_inv = pd.DataFrame(db["inventory"])
+            sheet_inv.update([df_inv.columns.values.tolist()] + df_inv.values.tolist())
 
-def load_data():
-    if os.path.exists(DB_FILE):
-        with open(DB_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    return default_inventory
+        # 存入 Manifest
+        sheet_man = get_google_sheet("Manifest")
+        sheet_man.clear()
+        man_rows = [{"order_no": k, **v} for k, v in db["manifest_by_order"].items()]
+        if man_rows:
+            df_man = pd.DataFrame(man_rows)
+            sheet_man.update([df_man.columns.values.tolist()] + df_man.values.tolist())
 
-def save_data(data):
-    with open(DB_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=4, ensure_ascii=False)
-
-inventory = load_data()
-
+        # 存入 Counters
+        sheet_count = get_google_sheet("Counters")
+        sheet_count.clear()
+        count_rows = [{"date": k, "count": v} for k, v in db["daily_counters"].items()]
+        if count_rows:
+            df_count = pd.DataFrame(count_rows)
+            sheet_count.update([df_count.columns.values.tolist()] + df_count.values.tolist())
+    except Exception as e:
+        st.error(f"雲端同步失敗: {e}")
 print("========================================================================")
 print("                  JAN Code 智慧在庫管理系統 (終極版)                     ")
 print("========================================================================")
