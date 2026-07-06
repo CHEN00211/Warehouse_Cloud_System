@@ -327,7 +327,7 @@ i18n = {
 }
 
 t = i18n[st.session_state.lang]
-st.title(t["title"])
+
 
 if "f_op_name" not in st.session_state:
     st.session_state.f_op_name = ""
