@@ -2,31 +2,39 @@ import streamlit as st
 import pandas as pd
 import gspread
 
-# 1. 頁面設定 (必須是第一行)
+# 1. 頁面設定 (必須是第一行，不可更動)
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
 
 # 2. 定義連線函式
 def get_google_sheet(sheet_name):
+    # 確保 Secrets 設定在 Streamlit Cloud 中
     creds = st.secrets["gcp_service_account"]
     gc = gspread.service_account_from_dict(creds)
     return gc.open("Inventory_DB").worksheet(sheet_name)
 
-# 3. 雲端資料庫管理員 (從 main.py 搬過來並簡化)
-def load_db_from_sheets():
-    db = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
-    try:
-        db["inventory"] = get_google_sheet("Inventory").get_all_records()
-        # 讀取其他分頁...
-    except Exception as e:
-        st.sidebar.error(f"雲端載入失敗: {e}")
-    return db
+# 3. 強制測試連線 (放在 UI 設定之後)
+st.write("正在連接 Google Sheets...")
+try:
+    test_sheet = get_google_sheet("Inventory")
+    st.success("Google Sheet 連線成功！")
+except Exception as e:
+    st.error(f"連線失敗: {e}")
+    st.stop()
 
-# 4. 初始化
+# 4. 初始化 Session State
 if "db" not in st.session_state:
-    st.session_state["db"] = load_db_from_sheets()
+    st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 # 5. UI 設定
 tab1, tab2, tab3, tab4 = st.tabs(["Tab 1", "Tab 2", "Tab 3", "Tab 4"])
+
+with tab1:
+    st.header("Tab 1")
+    st.write("這裡可以開始放入您的查詢邏輯")
+
+with tab4:
+    st.header("Tab 4")
+    st.write("這裡是您的盤點區")
 
 with tab1:
     st.write("這裡是 Tab 1")
