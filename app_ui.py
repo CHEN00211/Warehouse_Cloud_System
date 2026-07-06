@@ -123,36 +123,61 @@ def load_db_from_sheets():
         st.error(f"雲端資料讀取失敗: {e}")
         # 若讀取失敗，回傳預設結構以避免程式崩潰
         return {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
-
 def save_data(db):
-    """【將資料同步回對應的 Google Sheets 分頁】"""
     try:
         # 1. 儲存 Inventory
         sheet_inv = get_google_sheet("Inventory")
         sheet_inv.clear()
         if db["inventory"]:
             df_inv = pd.DataFrame(db["inventory"])
+            # 💡 強制將所有欄位轉為標準字串，防止型態衝突
+            df_inv = df_inv.fillna("").astype(str)
             sheet_inv.update([df_inv.columns.values.tolist()] + df_inv.values.tolist())
 
-        # 2. 儲存 Manifest (將字典轉回列表格式寫入)
+        # 2. 儲存 Manifest (平坦化寫入 Google Sheets)
         sheet_man = get_google_sheet("Manifest")
         sheet_man.clear()
-        man_list = [{"order_no": k, **v} for k, v in db["manifest_by_order"].items()]
-        if man_list:
-            df_man = pd.DataFrame(man_list)
+        flat_manifest = []
+        for o_no, doc in db["manifest_by_order"].items():
+            info = doc.get("info", {})
+            archived = doc.get("archived_order", False)
+            for jan, item in doc.get("items", {}).items():
+                flat_manifest.append({
+                    "order_no": str(o_no),
+                    "upload_date": str(info.get("upload_date", "")),
+                    "expected_delivery": str(info.get("expected_delivery", "")),
+                    "operator": str(info.get("operator", "")),
+                    "vendor": str(info.get("vendor", "")),
+                    "archived_order": str(archived),
+                    "jan_code": str(jan),
+                    "name_ja": str(item.get("name_ja", "")),
+                    "expected_count": int(item.get("expected_count", 0)),
+                    "actual_count": int(item.get("actual_count", 0)),
+                    "lot_no": str(item.get("lot_no", "")),
+                    "expiry": str(item.get("expiry", "")),
+                    "status": str(item.get("status", "未點收")),
+                    "is_sub_row": str(item.get("is_sub_row", False)),
+                    "parent_jan": str(item.get("parent_jan", ""))
+                })
+        if flat_manifest:
+            df_man = pd.DataFrame(flat_manifest)
+            # 💡 核心防禦：強制將整張 Manifest 表格欄位全數鎖定為標準字串，徹底消滅 struct_value 錯誤
+            df_man = df_man.fillna("").astype(str)
             sheet_man.update([df_man.columns.values.tolist()] + df_man.values.tolist())
 
         # 3. 儲存 Counters
         sheet_count = get_google_sheet("Counters")
         sheet_count.clear()
-        count_list = [{"date": k, "count": v} for k, v in db["daily_counters"].items()]
+        count_list = [{"date": str(k), "count": int(v)} for k, v in db["daily_counters"].items()]
         if count_list:
             df_count = pd.DataFrame(count_list)
+            df_count = df_count.fillna("").astype(str)
             sheet_count.update([df_count.columns.values.tolist()] + df_count.values.tolist())
             
-        st.toast("資料已同步至雲端")
+        st.toast("雲端同步成功")
     except Exception as e:
         st.error(f"雲端存檔失敗: {e}")
+
 
 # 核心防禦：每次重整，都強制從雲端同步最新狀態
 if "db" not in st.session_state:
