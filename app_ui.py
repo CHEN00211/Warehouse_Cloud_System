@@ -7,6 +7,7 @@ import datetime
 
 # 1. 頁面設定 (必須是第一行，不可更動)
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
+st.title("到貨驗收系統")
 
 # 2. 定義連線函式
 def get_google_sheet(sheet_name):
