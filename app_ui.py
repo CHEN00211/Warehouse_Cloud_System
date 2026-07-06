@@ -1178,9 +1178,17 @@ with tab4:
         # 整理成原本程式預期的 t4_data 結構
         t4_data = {"inventory_sheets": {}}
         for row in raw_data_t4:
-            s_id = row.get("sheet_id", "default")
+            # 💡 核心防禦：強制將從雲端讀出來的 sheet_id 轉為標準字串！
+            s_id = str(row.get("sheet_id", "default")).strip() 
+            
             if s_id not in t4_data["inventory_sheets"]:
-                t4_data["inventory_sheets"][s_id] = {"info": {}, "items": []}
+                t4_data["inventory_sheets"][s_id] = {
+                    "info": {
+                        "operator": str(row.get("operator", "")),
+                        "upload_date": str(row.get("upload_date", ""))
+                    },
+                    "items": []
+                }
             
             # --- 關鍵修正：嚴格處理 is_counted ---
             val = row.get("is_counted", False)
