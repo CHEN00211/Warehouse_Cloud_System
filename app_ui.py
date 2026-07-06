@@ -910,11 +910,11 @@ with tab3:
             target_info = target_doc.get("info", {})
             target_pool = target_doc.get("items", {})
             
-            if st.session_state.lang == "zh":
+             if st.session_state.lang == "zh":
                 meta_df_t3 = pd.DataFrame([
                     {"欄位": "供應商", "內容": target_info.get("vendor", "-")},
                     {"欄位": "預計入庫日", "內容": target_info.get("expected_delivery", "-")},
-                    {"欄位": "操作人員", "內容": target_info.get("operator", "-"),
+                    {"欄位": "操作人員", "內容": target_info.get("operator", "-")}, # 👈 已修正為 }
                     {"欄位": "上傳日", "內容": target_info.get("upload_date", "-")}
                 ])
             else:
