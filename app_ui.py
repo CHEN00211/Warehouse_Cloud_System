@@ -32,16 +32,17 @@ def get_google_sheet(sheet_name):
     # 開啟你的 Google Sheets 檔案並選取指定工作表
     return gc.open("Inventory_DB").worksheet(sheet_name)
     # 3. 【核心初始化：在這裡加上那段程式碼】
-if "db" not in st.session_state:
-    st.session_state["db"] = load_db_from_sheets()
-
-db = st.session_state["db"]  # 之後整個程式都可以直接使用 db
+# --- 在 app.py 找到這段，先把它們變成註解 ---
+# if "db" not in st.session_state:
+#     st.session_state["db"] = load_db_from_sheets()
+# db = st.session_state["db"]
 
 # 4. 接下來才是您的 UI 設定 (例如 tab1, tab2...)
 tab1, tab2, tab3, tab4 = st.tabs(["Tab 1", "Tab 2", "Tab 3", "Tab 4"])
 
 with tab1:
-    # 這裡現在就可以直接使用 db 了，例如：
+# 只在進入 Tab 1 時才載入
+    db = load_db_from_sheets()
     st.write(db["inventory"])
 
 # ==========================================
