@@ -2,43 +2,29 @@ import streamlit as st
 import pandas as pd
 import gspread
 
-# 1. 頁面設定 (必須是第一行，不可更動)
+# 1. 唯一且優先的頁面設定
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
 
 # 2. 定義連線函式
 def get_google_sheet(sheet_name):
-    # 確保 Secrets 設定在 Streamlit Cloud 中
     creds = st.secrets["gcp_service_account"]
     gc = gspread.service_account_from_dict(creds)
     return gc.open("Inventory_DB").worksheet(sheet_name)
 
-# 3. 強制測試連線 (放在 UI 設定之後)
-st.write("正在連接 Google Sheets...")
+# 3. 統一入口：檢查連線
 try:
-    test_sheet = get_google_sheet("Inventory")
-    st.success("Google Sheet 連線成功！")
+    test = get_google_sheet("Inventory")
 except Exception as e:
     st.error(f"連線失敗: {e}")
     st.stop()
 
-# 4. 初始化 Session State
-if "db" not in st.session_state:
-    st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
-
-# 5. UI 設定
-tab1, tab2, tab3, tab4 = st.tabs(["Tab 1", "Tab 2", "Tab 3", "Tab 4"])
+# 4. 建立 Tabs 容器
+# 注意：這裡只需定義一次，不要重複定義 tab1-4
+tab1, tab2, tab3, tab4 = st.tabs(["入庫管理", "驗收點貨", "歷史單據", "庫存盤點"])
 
 with tab1:
-    st.header("Tab 1")
+    st.header("入庫管理")
     st.write("這裡可以開始放入您的查詢邏輯")
-
-with tab4:
-    st.header("Tab 4")
-    st.write("這裡是您的盤點區")
-
-with tab1:
-    st.write("這裡是 Tab 1")
-    # 之後再在這裡呼叫讀取資料的邏輯
 
 # ==========================================
 # 🛑【全域物理消滅】用 CSS 隱藏並自動關閉 Clear Cache 彈窗
