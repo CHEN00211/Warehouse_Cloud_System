@@ -1,6 +1,9 @@
 import streamlit as st
 import pandas as pd
 import gspread
+import io          
+import re          
+import datetime
 
 # 1. 頁面設定 (必須是第一行，不可更動)
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
@@ -26,7 +29,7 @@ if "db" not in st.session_state:
     st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 # 5. UI 設定
-tab1, tab2, tab3, tab4 = st.tabs(["Tab 1: 到貨導入", "Tab 2: PDA驗收", "Tab 3: 歷史單據", "Tab 4: 實體盤點"])
+tab1, tab2, tab3, tab4 = st.tabs(["到貨導入", "PDA驗收", "歷史單據", "實體盤點"])
 
 
 # ==========================================
