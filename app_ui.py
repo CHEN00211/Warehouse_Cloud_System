@@ -1279,7 +1279,7 @@ with tab4:
     sheet_options = list(t4_data["inventory_sheets"].keys())
     
     if sheet_options:
-        sorted_sheets = sorted(sheet_options, reverse=True)
+        sorted_sheets = sorted([str(opt) for opt in sheet_options if opt], reverse=True)
         
         col_select, col_delete = st.columns([4, 1])
         with col_select:
