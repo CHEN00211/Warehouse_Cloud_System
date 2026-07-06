@@ -11,6 +11,7 @@ import gspread
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
 
 # 這是統一管理所有 Sheet 連線的核心函式
+@st.cache_resource
 def get_google_sheet(sheet_name):
     # 對應你在 Streamlit Secrets 設定的名稱
     creds = st.secrets["gcp_service_account"]
@@ -1145,7 +1146,7 @@ with tab4:
     # 1. 物理隔離：建立專屬於 Tab 4 的本地變數與檔案，與全域獨立
     try:
         # 使用你剛寫好的橋樑函式
-        sheet = get_sheet_by_tab("tab4")
+        sheet = get_google_sheet("tab4")
         raw_data = sheet.get_all_records()
         # 整理成原本程式預期的 t4_data 結構
         t4_data = {"inventory_sheets": {}}
@@ -1168,7 +1169,7 @@ with tab4:
     # 2. 專屬存檔安全函式
     def _tab4_isolated_save(data_to_save):
         try:
-            sheet = get_sheet_by_tab("tab4")
+            sheet = get_google_sheet("tab4")
             # 攤平資料：將字典轉回 DataFrame
             all_rows = []
             for s_id, content in data_to_save["inventory_sheets"].items():
