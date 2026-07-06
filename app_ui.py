@@ -351,6 +351,7 @@ if "pda_key" not in st.session_state:
     st.session_state.pda_key = 0
 
 tab1, tab2, tab3, tab4 = st.tabs([t["tab1"], t["tab2"], t["tab3"], t["tab4"]])
+
 # ==========================================
 # PART 2: Tab1 CSV 上傳與核心資料處理
 # ==========================================
@@ -473,7 +474,7 @@ with tab1:
             else:
                 grid_status = "未驗收" if st.session_state.lang == "zh" else "未検収"
             
-                        # 💡【核心修正】Tab1 未入庫大表標頭純進化分流，完全拆分中日文
+            # 💡【核心修正】Tab1 未入庫大表標頭純進化分流，完全拆分中日文
             if st.session_state.lang == "zh":
                 history_data.append({
                     "序號": display_idx,
@@ -587,6 +588,7 @@ with tab2:
                     }
                 )
             st.markdown("---")
+            
             def handle_pda_scan_secure():
                 current_key_name = f"pda_input_slot_{selected_order}_{st.session_state.pda_key}"
                 raw_jan = st.session_state[current_key_name].strip()
@@ -614,7 +616,6 @@ with tab2:
                 st.session_state.temp_expected_count = 0
                 st.session_state.temp_actual_count = 0
                 st.session_state.show_dup_warning = False
-
 # ==========================================
 # PART 4-2: Tab2 確認提交表單與動態批次處理
 # ==========================================
@@ -723,7 +724,6 @@ with tab2:
                             st.error(error_message_to_show)
                         else:
                             target_jan = st.session_state.current_verified_jan
-                            
                             # 先把舊的副行清掉（若重複點收時避免無限疊加副行）
                             sub_keys_to_del = [k for k in current_manifest_pool.keys() if current_manifest_pool[k].get("is_sub_row") and current_manifest_pool[k].get("parent_jan") == target_jan]
                             for sk in sub_keys_to_del:
@@ -735,7 +735,7 @@ with tab2:
                                 c_lot = v_row["lot"]
                                 c_exp = v_row["expiry"]
                                 
-                                # 💾【實體庫存持久化】確保實體 database.json 名冊乾淨無損
+                                # 💾【實體庫存持久化】確保實體名冊乾淨無損
                                 db["inventory"].append({
                                     "jan_code": target_jan, 
                                     "name_ja": current_manifest_pool[target_jan]["name_ja"],
@@ -764,7 +764,7 @@ with tab2:
                                         "parent_jan": target_jan
                                     }
                             
-                            # 💾 安全同步硬碟
+                            # 💾 安全同步雲端
                             save_data(db)
                             
                             st.success(t["success"])
@@ -797,8 +797,7 @@ with tab2:
                 lot_col = "ロット番号"
                 exp_col = "賞味期限"
                 status_col = "ステータス"
-
-            # 💡【背景總合算開關】第一步：先用一個迴圈把這張單子裡，每個 JAN 條碼的「總實到數量」算出來
+            # 💡【Tab2 核心合算門神】計算該單據各 JAN 碼的總實到數量（主行+所有副行）
             jan_total_actual_map = {}
             for k, v in current_manifest_pool.items():
                 real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
@@ -806,42 +805,44 @@ with tab2:
                     jan_total_actual_map[real_jan] = 0
                 jan_total_actual_map[real_jan] += v["actual_count"]
 
-            report_list = []
+            receiving_report_list = []
             for k, v in current_manifest_pool.items():
-                if v["status"] == "決收點貨":
-                    item_status = t.get("status_done", "驗貨完畢")
-                else:
-                    item_status = t.get("status_pending", "未點收")
-                    
                 real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
                 
-                # 💡【合算扣減關鍵邏輯】依據主副行動態計算各自對齊的應到數與真實差異，徹底消滅負數！
+                # 副行預計數/差異數皆為 0；主行差異數扣除副行實到，避免產生負數
                 if v.get("is_sub_row"):
-                    # 如果這筆是按 + 增開出來的副行，預計數顯示 0，差異數量也直接顯示 0，絕不出現負數！
                     calc_expected = 0
                     calc_shortage = 0
                     display_jan = real_jan
                 else:
-                    # 如果這是原始主行，顯示 CSV 當初的預計數，且差異數量 = 原始預計數 - 背景總實到數(主+副)
                     calc_expected = v["expected_count"]
                     calc_shortage = v["expected_count"] - jan_total_actual_map.get(real_jan, 0)
                     display_jan = k
-                    
-                report_list.append({
+                
+                if v.get("status") == "決收點貨":
+                    item_status = "驗貨完畢" if st.session_state.lang == "zh" else "検収完了"
+                else:
+                    item_status = "未點收" if st.session_state.lang == "zh" else "未検収"
+                
+                # 過濾模式判斷：若選擇「僅顯示有差異品項」，且差異為 0，則跳過不顯示
+                if filter_mode == t["filter_short"] and calc_shortage == 0:
+                    continue
+
+                receiving_report_list.append({
                     jan_col: display_jan,
                     name_col: v["name_ja"],
-                    req_col: calc_expected,      # 換成合算後的預計應到數
+                    req_col: calc_expected,      
                     act_col: v["actual_count"],
-                    short_col: calc_shortage,    # 換成合算後的總差異數量（消滅負數）
+                    short_col: calc_shortage,    
                     lot_col: v.get("lot_no", ""),
                     exp_col: v.get("expiry", ""),
                     status_col: item_status
                 })
             
-            if report_list:
-                df_report_all = pd.DataFrame(report_list)
-                                # 💡【精準 CSV 原始名冊順序黏合錨點】
-                # 從原始導入的字典中，只篩選出最乾淨的主行（非副行），建立絕對的 CSV 順序對照表
+            if receiving_report_list:
+                df_receiving = pd.DataFrame(receiving_report_list)
+                
+                # 精準 CSV 原始名冊順序黏合錨點（保持與原始 CSV 順序一致）
                 csv_original_order = {}
                 order_idx = 0
                 for item_key, item_val in current_manifest_pool.items():
@@ -849,99 +850,39 @@ with tab2:
                         csv_original_order[item_key] = order_idx
                         order_idx += 1
 
-                # 依據 DataFrame 內已經組合好的「JAN 條碼」與欄位狀態，動態生成排序權重
-                # jan_col 是前面定義好的變數（中文為 "JAN 條碼"，日文為 "JAN Code"）
-                # status_col 是狀態欄位，未點收的品項（如果有）維持在主行位置
                 temp_sort_csv_idx = []
                 temp_sort_is_sub = []
 
-                for index, row in df_report_all.iterrows():
+                for index, row in df_receiving.iterrows():
                     current_row_jan = str(row[jan_col]).strip()
-                    # 透過檢查後台名冊，判斷目前 DataFrame 裡的這一行，對應到原始商品是主行還是副行
-                    # 我們可以用 lot 批次或在遍歷時比對 pool 的結構，最安全的是直接比對原始 pool 是否為副行
-                    # 由於 DataFrame 上的 JAN 條碼欄位主副行都長一樣，我們需要到 pool 裡找出對應的屬性
-                    
-                    # 找出在 report_list 中當前索引對應的原始 pool 項目屬性
                     pool_item_key = list(current_manifest_pool.keys())[index]
                     is_sub_flag = 1 if current_manifest_pool[pool_item_key].get("is_sub_row") else 0
                     
                     temp_sort_csv_idx.append(csv_original_order.get(current_row_jan, 9999))
                     temp_sort_is_sub.append(is_sub_flag)
 
-                df_report_all["_sort_csv_idx"] = temp_sort_csv_idx
-                df_report_all["_sort_sub"] = temp_sort_is_sub
+                df_receiving["_sort_csv_idx"] = temp_sort_csv_idx
+                df_receiving["_sort_sub"] = temp_sort_is_sub
 
-                # 執行雙層穩定排序：第一層按 CSV 原始品項先後，第二層按主行(0)在前、副行(1)在後
-                df_report_all = df_report_all.sort_values(
+                # 執行雙層穩定排序，確保副行緊跟在主行下方
+                df_receiving = df_receiving.sort_values(
                     by=["_sort_csv_idx", "_sort_sub"],
                     ascending=[True, True],
                     kind="stable"
                 ).drop(columns=["_sort_csv_idx", "_sort_sub"])
 
-                df_report_visible = df_report_all[df_report_all[short_col] != 0] if filter_mode == t["filter_short"] else df_report_all
-                st.dataframe(df_report_visible, use_container_width=True, hide_index=True)
-
-                # --------------------------------------------------
-                # 🛠️ 核心功能：【完成驗貨】手動結案與未完工防呆警示閘門
-                # --------------------------------------------------
-                st.markdown("---")
-                unverified_count = sum(1 for item in current_manifest_pool.values() if item.get("status") != "決收點貨")
+                st.dataframe(df_receiving, use_container_width=True, hide_index=True)
                 
-                if f"show_confirm_gate_{selected_order}" not in st.session_state:
-                    st.session_state[f"show_confirm_gate_{selected_order}"] = False
-
-                col_btn_gate1, col_btn_gate2 = st.columns(2)
-                with col_btn_gate1:
-                    finish_text = t.get("finish_verify_btn", "完成驗貨")
-                    if st.button(finish_text, type="primary", use_container_width=True, key=f"btn_finish_verify_gate_{selected_order}"):
-                        if unverified_count > 0:
-                            st.session_state[f"show_confirm_gate_{selected_order}"] = True
-                        else:
-                            current_doc["archived_order"] = True
-                            save_data(db)  # 💾 安全同步硬碟
-                            st.toast("本張單據已全數驗收完畢，成功手動結案歸檔！" if st.session_state.lang == "zh" else "この伝票の検収が完了し、アーカイブされました！")
-                            st.session_state.current_verified_jan = ""
-                            st.rerun()
-
-                if st.session_state[f"show_confirm_gate_{selected_order}"]:
-                    st.markdown(" ")
-                    warning_template = t.get("gate_warning_msg", "目前此單據內還有 {} 筆商品尚未完成驗貨！請問是否仍要強制完工結案並上傳報表？")
-                    st.warning(warning_template.format(unverified_count))
-                    
-                    col_choice1, col_choice2 = st.columns(2)
-                    with col_choice1:
-                        if st.button(t.get("force_archive_btn", "強制結案上傳"), type="primary", use_container_width=True, key=f"btn_force_archive_gate_{selected_order}"):
-                            current_doc["archived_order"] = True
-                            save_data(db)  # 💾 安全同步硬碟
-                            st.session_state[f"show_confirm_gate_{selected_order}"] = False
-                            st.session_state.current_verified_jan = ""
-                            st.rerun()
-                    with col_choice2:
-                        if st.button(t.get("cancel_archive_btn", "取消並返回點貨"), type="secondary", use_container_width=True, key=f"btn_cancel_archive_gate_{selected_order}"):
-                            st.session_state[f"show_confirm_gate_{selected_order}"] = False
-                            st.rerun()
-
-                # 💡【Excel 完美匯出閘門】使用精密合算完、無負數的 df_report_all 寫入檔案
-                st.markdown(" ")
-                excel_buffer = io.BytesIO()
-                with pd.ExcelWriter(excel_buffer, engine="openpyxl") as writer:
-                    df_report_all.to_excel(writer, index=False, sheet_name=f"Order_{selected_order}")
-                st.download_button(
-                    label=t.get("export_excel_btn", "匯出 Excel (.xlsx)"),
-                    data=excel_buffer.getvalue(),
-                    file_name=f"RECEIVING_REPORT_{selected_order}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    key=f"t2_excel_download_final_gate_{selected_order}"
-                )
+                #  當前入庫單結案按鈕 (完成驗貨)
+                st.markdown("---")
+                archive_btn_label = " 完成本單驗貨（移至歷史存檔）" if st.session_state.lang == "zh" else " 検収完了（履歴に移動）"
+                if st.button(archive_btn_label, type="primary", use_container_width=True, key=f"archive_order_btn_{selected_order}"):
+                    db["manifest_by_order"][selected_order]["archived_order"] = True
+                    save_data(db)
+                    st.success(f"單據 {selected_order} 已成功結案並移至歷史存檔區域！")
+                    st.rerun()
             else:
-                st.text("-")
-        else:
-            pass
-    else:
-        if st.session_state.lang == "zh":
-            st.text("所有入庫單據皆已全數驗收完畢暫無需要點收的單據")
-        else:
-            st.text("入荷予定伝票データがありません")
+                st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
 # ==========================================
 # PART 5: 整個完整的 Tab3 歷史單據區塊 (消滅負數升級版 - 上)
 # ==========================================
@@ -973,7 +914,7 @@ with tab3:
                 meta_df_t3 = pd.DataFrame([
                     {"欄位": "供應商", "內容": target_info.get("vendor", "-")},
                     {"欄位": "預計入庫日", "內容": target_info.get("expected_delivery", "-")},
-                    {"欄位": "操作人員", "內容": target_info.get("operator", "-")},
+                    {"欄位": "操作人員", "內容": target_info.get("operator", "-"),
                     {"欄位": "上傳日", "內容": target_info.get("upload_date", "-")}
                 ])
             else:
@@ -1056,7 +997,7 @@ with tab3:
                 })
             if report_list:
                 df_report = pd.DataFrame(report_list)
-                                            # 💡【歷史區：精準 CSV 原始名冊順序黏合錨點】
+                # 💡【歷史區：精準 CSV 原始名冊順序黏合錨點】
                 csv_original_order_t3 = {}
                 order_idx_t3 = 0
                 for item_key, item_val in target_pool.items():
@@ -1085,7 +1026,6 @@ with tab3:
                     kind="stable"
                 ).drop(columns=["_sort_csv_idx", "_sort_sub"])
 
-
                 st.dataframe(df_report, use_container_width=True, hide_index=True)
                 
                 # 💡【核心修正】確保歷史單據下載的 Excel 同步套用無負數結構，維持與畫面完全一致
@@ -1105,7 +1045,6 @@ with tab3:
                 st.error("該單據尚未完成點貨或單號不存在")
             else:
                 st.error("伝票番号が正しくないか、検収が完了していません")
-
         st.markdown("---")
         if st.session_state.lang == "zh":
             st.text("歷史單據總覽")
@@ -1167,16 +1106,14 @@ with tab3:
             st.caption("-")
     else:
         st.caption("-")
+# ==========================================
+# PART 6: Tab4 實體盤點獨立雲端閘門
+# ==========================================
 with tab4:
     # --- 只在 Tab4 範圍內初始化 ---
     if "t4_form_key" not in st.session_state:
         st.session_state.t4_form_key = 0
     # ---------------------------
-    import json
-    import os
-    import pandas as pd
-    import datetime
-    import io
 
     # 確保語系邏輯與您的全域設定同步
     is_zh = getattr(st.session_state, "lang", "zh") == "zh"
@@ -1187,19 +1124,18 @@ with tab4:
 
     # 1. 物理隔離：建立專屬於 Tab 4 的本地變數與檔案，與全域獨立
     try:
-        # 使用你剛寫好的橋樑函式
-        sheet = get_google_sheet("tab4")
-        raw_data = sheet.get_all_records()
+        # 使用您原有的連線函式
+        sheet_t4 = get_google_sheet("tab4")
+        raw_data_t4 = sheet_t4.get_all_records()
         
         # 整理成原本程式預期的 t4_data 結構
         t4_data = {"inventory_sheets": {}}
-        for row in raw_data:
+        for row in raw_data_t4:
             s_id = row.get("sheet_id", "default")
             if s_id not in t4_data["inventory_sheets"]:
                 t4_data["inventory_sheets"][s_id] = {"info": {}, "items": []}
             
             # --- 關鍵修正：嚴格處理 is_counted ---
-            # 獲取值，預設為 False
             val = row.get("is_counted", False)
             
             # 將各種可能的型別轉為布林值 (處理字串、空值、數字)
@@ -1233,7 +1169,6 @@ with tab4:
                 sheet.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
         except Exception as e:
             st.error(f"雲端存檔失敗: {e}")
-
     # 1. 導入新實體盤點名冊
     st.subheader(_("1. 盤點明細", "1. 棚卸データ"))
     
@@ -1282,6 +1217,8 @@ with tab4:
                     st.session_state["clear_t4_form"] = True
                     st.session_state["msg_success"] = _(f"成功導入盤點明細：{inv_sheet_id}", f"棚卸明細 {inv_sheet_id} が登録されました")
                     st.rerun()
+                else:
+                    st.error(_("CSV欄位錯誤，必須包含: jan_code, name_ja, location, expiry, stock", "CSVヘッダー不正: jan_code, name_ja, location, expiry, stock"))
             except Exception as e:
                 st.error(f"{_('解析錯誤', '解析エラー')}: {str(e)}")
     
@@ -1313,12 +1250,12 @@ with tab4:
         if st.session_state.get("confirm_delete_t4"):
             st.warning(_(f"確定要刪除盤點單 {selected_sheet} 嗎？", f"{selected_sheet} を削除しますか？"))
             d_c1, d_c2 = st.columns(2)
-            if d_c1.button(_("確認刪除", "はい、削除します"), type="primary"):
+            if d_c1.button(_("確認刪除", "はい、削除します"), type="primary", key="confirm_del_btn_t4"):
                 del t4_data["inventory_sheets"][selected_sheet]
                 _tab4_isolated_save(t4_data)
                 st.session_state["confirm_delete_t4"] = False
                 st.rerun()
-            if d_c2.button(_("取消", "いいえ")):
+            if d_c2.button(_("取消", "いいえ"), key="cancel_del_btn_t4"):
                 st.session_state["confirm_delete_t4"] = False
                 st.rerun()
 
@@ -1336,7 +1273,6 @@ with tab4:
             
             scan_input_key = f"pda_box_{selected_sheet}_{st.session_state[f'scan_counter_{selected_sheet}']}"
             scan_input = st.text_input(_("請將游標停在此處並使用 PDA 刷條碼", "JANコードをスキャンしてください"), key=scan_input_key)
-
             if scan_input:
                 scanned_jan = str(scan_input).strip()
                 all_matches_indices = []
@@ -1397,11 +1333,11 @@ with tab4:
                     _("商品品名", "商品名"): item.get("name_ja", ""),
                     _("貨位", "ロケーション"): item.get("location", ""),
                     _("有效期限", "賞味期限"): item.get("expiry", ""),
-                    _("在庫數", "実在庫数"): item.get("stock", 0)
+                    _("在庫數", "實在庫数"): item.get("stock", 0)
                 }
                 if item.get("is_counted", False):
                     act_qty = item.get("actual_stock", 0)
-                    row_data[_("盤點數", "実棚数")] = act_qty
+                    row_data[_("盤點數", "實棚数")] = act_qty
                     row_data[_("庫存差異", "差異")] = act_qty - item.get("stock", 0)
                     counted_list.append(row_data)
                 else:
