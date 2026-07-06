@@ -1,3 +1,7 @@
+# 強制測試 secrets 是否存在
+if "gcp_service_account" not in st.secrets:
+    st.error("找不到 Secrets！請至 Streamlit Cloud 設定頁面填入 JSON 金鑰。")
+    st.stop() # 這裡會停止執行，讓您看到紅字錯誤
 import streamlit as st
 import pandas as pd
 import re
