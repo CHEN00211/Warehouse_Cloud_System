@@ -1,5 +1,10 @@
 import streamlit as st
 import pandas as pd
+import re
+import datetime
+import io
+import os
+import json
 import gspread
 
 # 1. 唯一且優先的頁面設定
