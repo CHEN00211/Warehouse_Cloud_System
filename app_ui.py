@@ -26,19 +26,8 @@ if "db" not in st.session_state:
     st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 # 5. UI 設定
-tab1, tab2, tab3, tab4 = st.tabs(["Tab 1", "Tab 2", "Tab 3", "Tab 4"])
+tab1, tab2, tab3, tab4 = st.tabs(["Tab 1: 到貨導入", "Tab 2: PDA驗收", "Tab 3: 歷史單據", "Tab 4: 實體盤點"])
 
-with tab1:
-    st.header("Tab 1")
-    st.write("這裡可以開始放入您的查詢邏輯")
-
-with tab4:
-    st.header("Tab 4")
-    st.write("這裡是您的盤點區")
-
-with tab1:
-    st.write("這裡是 Tab 1")
-    # 之後再在這裡呼叫讀取資料的邏輯
 
 # ==========================================
 # 🛑【全域物理消滅】用 CSS 隱藏並自動關閉 Clear Cache 彈窗
