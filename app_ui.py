@@ -16,15 +16,6 @@ def get_google_sheet(sheet_name):
     gc = gspread.service_account_from_dict(creds)
     return gc.open("Inventory_DB").worksheet(sheet_name)
 
-# 3. 強制測試連線 (放在 UI 設定之後)
-st.write("正在連接 Google Sheets...")
-try:
-    test_sheet = get_google_sheet("Inventory")
-    st.success("Google Sheet 連線成功！")
-except Exception as e:
-    st.error(f"連線失敗: {e}")
-    st.stop()
-
 # 4. 初始化 Session State
 if "db" not in st.session_state:
     st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
@@ -103,26 +94,65 @@ components.html(
 # ==========================================
 # ☁️ Google Sheets 全雲端持久化閘門
 # ==========================================
-
 def load_db_from_sheets():
-    """【從 Google Sheets 讀取並重組資料結構】"""
     try:
-        # 1. 讀取各分頁資料
         inv_rows = get_google_sheet("Inventory").get_all_records()
         man_rows = get_google_sheet("Manifest").get_all_records()
         count_rows = get_google_sheet("Counters").get_all_records()
-
-        # 2. 重組為程式所需的結構 (視您的資料關聯調整)
-        db = {
+        
+        manifest_dict = {}
+        for row in man_rows:
+            o_no = str(row.get("order_no", "")).strip()
+            if not o_no: 
+                continue
+                
+            # 💡 核心解碼修正：如果這張入庫單第一次出現在迴圈中，立刻從該行儲存格抽取 info
+            if o_no not in manifest_dict:
+                manifest_dict[o_no] = {
+                    "info": {
+                        "upload_date": str(row.get("upload_date", "-")),
+                        "expected_delivery": str(row.get("expected_delivery", "-")),
+                        "operator": str(row.get("operator", "-")),
+                        "vendor": str(row.get("vendor", "-"))
+                    },
+                    # 確保 archived_order 布林值型態解析正確
+                    "archived_order": str(row.get("archived_order", "False")).lower() in ['true', '1', 'yes'],
+                    "items": {}
+                }
+                
+            jan = str(row.get("jan_code", "")).strip()
+            if jan:
+                manifest_dict[o_no]["items"][jan] = {
+                    "name_ja": row.get("name_ja", ""),
+                    "expected_count": int(row.get("expected_count", 0)),
+                    "actual_count": int(row.get("actual_count", 0)),
+                    "lot_no": str(row.get("lot_no", "")),
+                    "expiry": str(row.get("expiry", "")),
+                    "status": str(row.get("status", "未點收")),
+                    "is_sub_row": str(row.get("is_sub_row", "False")).lower() in ['true', '1', 'yes'],
+                    "parent_jan": str(row.get("parent_jan", ""))
+                }
+                
+            # 💡 核心防禦：萬一這張單據前面的行數 info 漏掉了，後面任何一行只要有資料就自動反向補齊！
+            if row.get("operator") and manifest_dict[o_no]["info"]["operator"] == "-":
+                manifest_dict[o_no]["info"]["operator"] = str(row.get("operator"))
+            if row.get("vendor") and manifest_dict[o_no]["info"]["vendor"] == "-":
+                manifest_dict[o_no]["info"]["vendor"] = str(row.get("vendor"))
+            if row.get("expected_delivery") and manifest_dict[o_no]["info"]["expected_delivery"] == "-":
+                manifest_dict[o_no]["info"]["expected_delivery"] = str(row.get("expected_delivery"))
+            if row.get("upload_date") and manifest_dict[o_no]["info"]["upload_date"] == "-":
+                manifest_dict[o_no]["info"]["upload_date"] = str(row.get("upload_date"))
+        
+        return {
             "inventory": inv_rows,
-            "manifest_by_order": {row["order_no"]: row for row in man_rows} if man_rows else {},
-            "daily_counters": {row["date"]: row["count"] for row in count_rows} if count_rows else {}
+            "manifest_by_order": manifest_dict,
+            "daily_counters": {str(row["date"]): int(row["count"]) for row in count_rows if "date" in row}
         }
-        return db
     except Exception as e:
-        st.error(f"雲端資料讀取失敗: {e}")
-        # 若讀取失敗，回傳預設結構以避免程式崩潰
+        st.error(f"雲端資料重組失敗: {e}")
         return {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
+
+
 def save_data(db):
     try:
         # 1. 儲存 Inventory
