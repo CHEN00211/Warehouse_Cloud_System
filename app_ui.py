@@ -16,7 +16,6 @@ from main import load_db_from_sheets, save_data
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
 
 # 這是統一管理所有 Sheet 連線的核心函式
-@st.cache_resource
 def get_google_sheet(sheet_name):
     # 對應你在 Streamlit Secrets 設定的名稱
     creds = st.secrets["gcp_service_account"]
