@@ -342,7 +342,6 @@ if "t1_form_key" not in st.session_state:
 if "pda_key" not in st.session_state:
     st.session_state.pda_key = 0
 
-tab1, tab2, tab3, tab4 = st.tabs([t["tab1"], t["tab2"], t["tab3"], t["tab4"]])
 
 # ==========================================
 # PART 2: Tab1 CSV 上傳與核心資料處理
