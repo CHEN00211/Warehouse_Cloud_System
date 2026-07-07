@@ -788,34 +788,71 @@ with tab2:
 
                 with st.form("verification_gate_form", clear_on_submit=False):
                     collected_rows_data = []
+                
                     
+                    # 1. 自資料庫取出目前 JAN 碼對應的原始預設數值
+                    target_jan = st.session_state.current_verified_jan
+                    db_item = current_manifest_pool.get(target_jan, {})
+                    
+                    # 2. 讀取箱數、箱入數（若欄位名稱不同，請自行修改 key 名稱）
+                    db_expected_cases = db_item.get("expected_cases", 10)  # 假設預設 10
+                    db_pcs_per_case = db_item.get("pcs_per_case", 10)      # 假設預設 10
+
                     # 動態迴圈畫出多個輸入欄位
                     for idx in range(st.session_state[f"row_count_{selected_order}"]):
                         st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                         
-                        col_field1, col_field2, col_field3 = st.columns(3)
-                        with col_field1:
-                            r_actual = st.number_input(t["actual"], min_value=0, value=int(st.session_state.temp_actual_count) if idx == 0 else 0, key=f"act_r_{selected_order}_{idx}")
-                        with col_field2:
+                        # 3. 初始狀態賦值：僅在第一組項目預設帶入 data 的值，其餘新增組預設為 0
+                        if idx == 0:
+                            init_cases = float(db_expected_cases)
+                            init_per_case = int(db_pcs_per_case)
+                            init_actual = int(st.session_state.temp_actual_count) # 畫面上抓到的 100
+                        else:
+                            init_cases = 0.0
+                            init_per_case = 0
+                            init_actual = 0
+
+                        # 4. 版面配置：將一列等分為 5 個欄位
+                        col_box, col_per, col_act, col_lot, col_exp = st.columns(5)
+                        
+                        with col_box:
+                            r_cases = st.number_input(
+                                "箱數" if st.session_state.lang == "zh" else "箱数", 
+                                min_value=0.0, 
+                                value=init_cases, 
+                                step=1.0, 
+                                key=f"box_r_{selected_order}_{idx}"
+                            )
+                        with col_per:
+                            r_per_case = st.number_input(
+                                "箱入數" if st.session_state.lang == "zh" else "入数", 
+                                min_value=0, 
+                                value=init_per_case, 
+                                key=f"per_r_{selected_order}_{idx}"
+                            )
+                        with col_act:
+                            r_actual = st.number_input(
+                                t["actual"], 
+                                min_value=0, 
+                                value=init_actual, 
+                                key=f"act_r_{selected_order}_{idx}"
+                            )
+                        with col_lot:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
                             r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}")
-                        with col_field3:
+                        with col_exp:
                             r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}")
                         
-                        collected_rows_data.append({"actual": r_actual, "lot": r_lot, "expiry": r_expiry})
+                        # 5. 蒐集本列所有資料（包含新增的箱數與箱入數）
+                        collected_rows_data.append({
+                            "actual": r_actual, 
+                            "lot": r_lot, 
+                            "expiry": r_expiry,
+                            "cases": r_cases,
+                            "pcs_per_case": r_per_case
+                        })
                         st.markdown("---")
-                    
-                    col_form_btn1, col_form_btn2 = st.columns(2)
-                    with col_form_btn1:
-                        submit_btn = st.form_submit_button(t["submit"], use_container_width=True)
-                    with col_form_btn2:
-                        if st.form_submit_button("+ 增加期限與批次欄位", use_container_width=True):
-                            st.session_state[f"row_count_{selected_order}"] += 1
-                            st.rerun()
-                    if submit_btn:
-                        is_all_rows_valid = True
-                        error_message_to_show = ""
-                        validated_rows = []
+
                         
                         # 第一步：校驗人員填寫的每一列資料格式
                         for idx, row_data in enumerate(collected_rows_data):
