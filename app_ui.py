@@ -243,64 +243,140 @@ def load_db_from_sheets():
 
 def save_data(db):
     try:
-        # 1. 儲存 Inventory
-        sheet_inv = get_google_sheet("Inventory")
-        sheet_inv.clear()
-        if db["inventory"]:
-            # 💡 在寫入前，確保 inventory 的每筆資料即使沒有新欄位也能提供預設值，防止欄位殘缺
-            sanitized_inv = []
-            for inv_item in db["inventory"]:
-                sanitized_inv.append({
-                    "jan_code": str(inv_item.get("jan_code", "")),
-                    "name_ja": str(inv_item.get("name_ja", "")),
-                    "lot_no": str(inv_item.get("lot_no", "")),
-                    "expiry": str(inv_item.get("expiry", "")),
-                    "stock": str(inv_item.get("stock", "0")),
-                    # 💡 庫存大表同步增加實到箱數與箱入數欄位
-                    "actual_cases": str(inv_item.get("actual_cases", "")),
-                    "pcs_per_case": str(inv_item.get("pcs_per_case", ""))
-                })
-            df_inv = pd.DataFrame(sanitized_inv)
-            df_inv = df_inv.fillna("").astype(str)
-            sheet_inv.update([df_inv.columns.values.tolist()] + df_inv.values.tolist())
+        # =========================================================
+        # 🔑 【核心欄位定義字典】
+        # 系統會拿這些關鍵字去比對您 Google Sheets 的第一行表頭。
+        # 不論您在 Sheets 把欄位排在第幾欄，只要包含這些字，系統就能自動對齊！
+        # =========================================================
+        inv_mapping = {
+            "jan_code": ["jan_code", "JAN條碼", "JAN 條碼", "JAN碼", "JAN Code"],
+            "name_ja": ["name_ja", "商品名稱", "商品名", "品名"],
+            "lot_no": ["lot_no", "Lot批次", "Lot 批次", "批次", "ロット番号", "ロット"],
+            "expiry": ["expiry", "有效期限", "效期", "賞味期限", "期限"],
+            "stock": ["stock", "庫存數量", "庫存", "實到數量", "數量", "stock"],
+            "actual_cases": ["actual_cases", "實到箱數", "箱數", "ケース数"],
+            "pcs_per_case": ["pcs_per_case", "箱入數", "入數", "入数"]
+        }
 
-        # 2. 儲存 Manifest (平坦化寫入 Google Sheets)
+        man_mapping = {
+            "order_no": ["order_no", "單據編號", "入庫單號", "伝票番号", "單號"],
+            "upload_date": ["upload_date", "上傳日期", "アップロード日"],
+            "expected_delivery": ["expected_delivery", "預計到貨日", "預計入庫", "納品予定日"],
+            "operator": ["operator", "操作人員", "操作員", "担当者"],
+            "vendor": ["vendor", "供應商", "仕入先"],
+            "jan_code": ["jan_code", "JAN條碼", "JAN 條碼", "JAN碼", "JAN Code"],
+            "name_ja": ["name_ja", "商品名稱", "商品名", "品名"],
+            "expected_cases": ["expected_cases", "預計箱數", "應到箱數", "予定箱数"],
+            "pcs_per_case": ["pcs_per_case", "箱入數", "入數", "入数"],
+            "actual_cases": ["actual_cases", "實到箱數", "箱數", "實收箱數"],
+            "expected_count": ["expected_count", "預計應到數量", "預計數量", "予定数"],
+            "actual_count": ["actual_count", "實到數量", "驗收數量", "納品数"],
+            "lot_no": ["lot_no", "Lot批次", "Lot 批次", "批次", "ロット番号"],
+            "expiry": ["expiry", "有效期限", "效期", "賞味期限"],
+            "status": ["status", "狀態", "ステータス"],
+            "is_sub_row": ["is_sub_row", "是否為副行", "副行"],
+            "parent_jan": ["parent_jan", "主行JAN", "親JAN"],
+            "archived_order": ["archived_order", "是否結案", "歷史存檔"]
+        }
+
+        # ---------------------------------------------------------
+        # 1. 儲存 Inventory (庫存大表)
+        # ---------------------------------------------------------
+        sheet_inv = get_google_sheet("Inventory")
+        all_values_inv = sheet_inv.get_all_values()
+        
+        # 💡 如果 Google Sheet 是一張全新、完全空白的表，自動幫它建立初始預設標頭
+        if not all_values_inv or not all_values_inv[0]:
+            inv_headers = ["jan_code", "name_ja", "lot_no", "expiry", "stock", "actual_cases", "pcs_per_case"]
+            sheet_inv.update([[inv_headers]])
+            all_values_inv = [inv_headers]
+            
+        current_inv_headers = [h.strip() for h in all_values_inv[0]] # 讀取您隨心所欲改的 Sheets 第一行
+
+        # 根據您在 Google Sheets 上擺放的欄位順序，動態組裝資料
+        rows_to_update_inv = []
+        if db["inventory"]:
+            for inv_item in db["inventory"]:
+                row_cells = []
+                for header in current_inv_headers:
+                    matched_val = ""
+                    # 尋找這個 Sheets 欄位對應系統裡的哪一個 Key
+                    for sys_key, aliases in inv_mapping.items():
+                        if header in aliases:
+                            matched_val = str(inv_item.get(sys_key, ""))
+                            break
+                    row_cells.append(matched_val)
+                rows_to_update_inv.append(row_cells)
+
+        # 🔒 清空第 2 行以下（不傷到第一行），並將資料依據您的欄位順序填入
+        sheet_inv.batch_clear(["A2:Z2000"])
+        if rows_to_update_inv:
+            sheet_inv.update(f"A2:Z{len(rows_to_update_inv) + 1}", rows_to_update_inv)
+
+
+        # ---------------------------------------------------------
+        # 2. 儲存 Manifest (入庫單據大表)
+        # ---------------------------------------------------------
         sheet_man = get_google_sheet("Manifest")
-        sheet_man.clear()
-        flat_manifest = []
+        all_values_man = sheet_man.get_all_values()
+        
+        # 💡 如果 Google Sheet 完全空白，自動幫它建立初始預設標頭
+        if not all_values_man or not all_values_man[0]:
+            man_headers = ["order_no", "upload_date", "expected_delivery", "operator", "vendor", "jan_code", "name_ja", "expected_cases", "pcs_per_case", "actual_cases", "expected_count", "actual_count", "lot_no", "expiry", "status", "is_sub_row", "parent_jan", "archived_order"]
+            sheet_man.update([man_headers])
+            all_values_man = [man_headers]
+            
+        current_man_headers = [h.strip() for h in all_values_man[0]] # 讀取您隨心所欲改的 Sheets 第一行
+
+        # 先平坦化系統資料庫
+        flat_manifest_data = []
         for o_no, doc in db["manifest_by_order"].items():
             info = doc.get("info", {})
             archived = doc.get("archived_order", False)
             for jan, item in doc.get("items", {}).items():
-                flat_manifest.append({
+                flat_manifest_data.append({
                     "order_no": str(o_no),
                     "upload_date": str(info.get("upload_date", "")),
                     "expected_delivery": str(info.get("expected_delivery", "")),
                     "operator": str(info.get("operator", "")),
                     "vendor": str(info.get("vendor", "")),
-                    "archived_order": str(archived),
                     "jan_code": str(jan),
                     "name_ja": str(item.get("name_ja", "")),
-                    "expected_count": int(item.get("expected_count", 0)),
-                    "actual_count": int(item.get("actual_count", 0)),
+                    "expected_cases": str(item.get("expected_cases", "")),
+                    "pcs_per_case": str(item.get("pcs_per_case", "")),
+                    "actual_cases": str(item.get("actual_cases", "")),
+                    "expected_count": str(item.get("expected_count", 0)),
+                    "actual_count": str(item.get("actual_count", 0)),
                     "lot_no": str(item.get("lot_no", "")),
                     "expiry": str(item.get("expiry", "")),
                     "status": str(item.get("status", "未點收")),
                     "is_sub_row": str(item.get("is_sub_row", False)),
                     "parent_jan": str(item.get("parent_jan", "")),
-                    
-                    # 💡 核心修正：正式回寫至 Google Sheets Manifest 表格
-                    "expected_cases": str(item.get("expected_cases", "")),
-                    "pcs_per_case": str(item.get("pcs_per_case", "")),
-                    "actual_cases": str(item.get("actual_cases", ""))
+                    "archived_order": str(archived)
                 })
-        if flat_manifest:
-            df_man = pd.DataFrame(flat_manifest)
-            df_man = df_man.fillna("").astype(str)
-            sheet_man.update([df_man.columns.values.tolist()] + df_man.values.tolist())
+
+        # 根據您在 Google Sheets 上擺放的欄位順序，動態組裝 Manifest 資料
+        rows_to_update_man = []
+        for item_data in flat_manifest_data:
+            row_cells = []
+            for header in current_man_headers:
+                matched_val = ""
+                # 尋找這個 Sheets 欄位對應系統裡的哪一個 Key
+                for sys_key, aliases in man_mapping.items():
+                    if header in aliases:
+                        matched_val = item_data.get(sys_key, "")
+                        break
+                row_cells.append(matched_val)
+            rows_to_update_man.append(row_cells)
+
+        # 🔒 清空第 2 行以下（不傷到第一行），並將資料依據您的欄位順序填入
+        sheet_man.batch_clear(["A2:Z5000"])
+        if rows_to_update_man:
+            sheet_man.update(f"A2:Z{len(rows_to_update_man) + 1}", rows_to_update_man)
             
     except Exception as e:
         st.error(f"儲存資料至 Google Sheets 時發生錯誤: {e}")
+
 
 
         # 3. 儲存 Counters
