@@ -669,11 +669,11 @@ with tab2:
                 current_key_name = f"pda_input_slot_{selected_order}_{st.session_state.pda_key}"
                 raw_input = st.session_state[current_key_name].strip()
                 
-                # 💡 【關鍵改動】呼叫先前定義的工具函式，將 ITF 自動還原成 JAN 碼
+                # 💡 將 ITF 自動還原成 JAN 碼
                 target_jan = itf_to_jan13(raw_input)
                 
-            if target_jan and current_manifest_pool:
-                    # 後續所有的比對與狀態賦值，全部改用轉換後的 target_jan
+                # 🔒 完美的 16 個空格縮排（相對於 def 有 4 個空格）
+                if target_jan and current_manifest_pool:
                     if target_jan in current_manifest_pool:
                         item = current_manifest_pool[target_jan]
                         st.session_state.current_verified_jan = target_jan
@@ -685,7 +685,9 @@ with tab2:
                     else:
                         st.session_state.current_verified_jan = "ERROR_NOT_FOUND"
                         st.session_state.pda_error_msg = t["jan_not_found"]
-            st.session_state.pda_key += 1
+                        
+                # 🔒 key + 1 必須在 if 結束後、函式結束前執行
+                st.session_state.pda_key += 1
 
 
             st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
