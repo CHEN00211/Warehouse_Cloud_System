@@ -247,8 +247,20 @@ def save_data(db):
         sheet_inv = get_google_sheet("Inventory")
         sheet_inv.clear()
         if db["inventory"]:
-            df_inv = pd.DataFrame(db["inventory"])
-            # 💡 強制將所有欄位轉為標準字串，防止型態衝突
+            # 💡 在寫入前，確保 inventory 的每筆資料即使沒有新欄位也能提供預設值，防止欄位殘缺
+            sanitized_inv = []
+            for inv_item in db["inventory"]:
+                sanitized_inv.append({
+                    "jan_code": str(inv_item.get("jan_code", "")),
+                    "name_ja": str(inv_item.get("name_ja", "")),
+                    "lot_no": str(inv_item.get("lot_no", "")),
+                    "expiry": str(inv_item.get("expiry", "")),
+                    "stock": str(inv_item.get("stock", "0")),
+                    # 💡 庫存大表同步增加實到箱數與箱入數欄位
+                    "actual_cases": str(inv_item.get("actual_cases", "")),
+                    "pcs_per_case": str(inv_item.get("pcs_per_case", ""))
+                })
+            df_inv = pd.DataFrame(sanitized_inv)
             df_inv = df_inv.fillna("").astype(str)
             sheet_inv.update([df_inv.columns.values.tolist()] + df_inv.values.tolist())
 
@@ -275,13 +287,21 @@ def save_data(db):
                     "expiry": str(item.get("expiry", "")),
                     "status": str(item.get("status", "未點收")),
                     "is_sub_row": str(item.get("is_sub_row", False)),
-                    "parent_jan": str(item.get("parent_jan", ""))
+                    "parent_jan": str(item.get("parent_jan", "")),
+                    
+                    # 💡 核心修正：正式回寫至 Google Sheets Manifest 表格
+                    "expected_cases": str(item.get("expected_cases", "")),
+                    "pcs_per_case": str(item.get("pcs_per_case", "")),
+                    "actual_cases": str(item.get("actual_cases", ""))
                 })
         if flat_manifest:
             df_man = pd.DataFrame(flat_manifest)
-            # 💡 核心防禦：強制將整張 Manifest 表格欄位全數鎖定為標準字串，徹底消滅 struct_value 錯誤
             df_man = df_man.fillna("").astype(str)
             sheet_man.update([df_man.columns.values.tolist()] + df_man.values.tolist())
+            
+    except Exception as e:
+        st.error(f"儲存資料至 Google Sheets 時發生錯誤: {e}")
+
 
         # 3. 儲存 Counters
         sheet_count = get_google_sheet("Counters")
