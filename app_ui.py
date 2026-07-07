@@ -44,7 +44,6 @@ def itf_to_jan13(barcode: str) -> str:
         
     return barcode # 如果是 13 位 JAN 碼或其他格式，就直接回傳不變
 # ========================================================    
-
 # 4. 初始化 Session State
 if "db" not in st.session_state:
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
@@ -106,7 +105,7 @@ if "db" not in st.session_state:
         except Exception as e:
             st.error(f"⚠️ 雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
- {}}
+
 
 
 # 5. UI 設定
