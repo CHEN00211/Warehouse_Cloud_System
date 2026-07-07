@@ -1441,7 +1441,8 @@ with tab3:
 # ==========================================
 with tab4:
     st.session_state.current_active_tab = "實體盤點"
-    if st.session_state.current_active_tab == "實體盤點":
+    if st.session_state.current_active_tab != "實體盤點":
+        st.stop()
     # --- 只在 Tab4 範圍內初始化 ---
     if "t4_form_key" not in st.session_state:
         st.session_state.t4_form_key = 0
@@ -1724,4 +1725,4 @@ with tab4:
                 )
     else:
         st.warning(_("目前系統中尚無任何盤點明細，請由上方區域導入您的第一張 CSV 盤點明細", "棚卸伝票がありません。上のフォームからインポートしてください。"))
-        pass 
+ 
