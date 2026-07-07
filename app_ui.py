@@ -528,7 +528,7 @@ with tab1:
                 else:
                     final_eta_str = v_date.strftime("%Y/%m/%d")
                     df_upload = pd.read_csv(uploaded_file, dtype={"jan_code": str})
-                    required_cols = ["jan_code", "name_ja", "expected_count"]
+                    required_cols = ["jan_code", "name_ja", "expected_count", "expected_cases", "pcs_per_case"]
                     
                     if all(col in df_upload.columns for col in required_cols):
                         today_mmdd = datetime.date.today().strftime("%m%d")
@@ -551,13 +551,25 @@ with tab1:
                         
                         for _, row in df_upload.iterrows():
                             jan_key = str(row["jan_code"]).strip()
+                            
+                            # 💡 安全轉型：提取 CSV 中的箱數與箱入數並轉為整數型態
+                            try:
+                                csv_cases = int(float(row["expected_cases"]))
+                                csv_pcs_per_case = int(float(row["pcs_per_case"]))
+                            except (ValueError, TypeError):
+                                csv_cases = 0
+                                csv_pcs_per_case = 0
+
                             db["manifest_by_order"][auto_order_no]["items"][jan_key] = {
                                 "name_ja": row["name_ja"],
                                 "expected_count": int(row["expected_count"]),
-                                "actual_count": 0,
+                                "actual_count": int(row["expected_count"]), # 💡 同步調整：初始實到數量直接預設等於預計數量
                                 "lot_no": "",
                                 "expiry": "",
-                                "status": "未點收" 
+                                "status": "未點收",
+                                "expected_cases": csv_cases,       
+                                "pcs_per_case": csv_pcs_per_case,   
+                                "actual_cases": csv_cases  # 💡 關鍵修正：初始實到箱數不要是 0，直接預設為 CSV 上傳的箱數數據
                             }
                         
                         prefix = t.get("success_msg_prefix", "上傳成功")
