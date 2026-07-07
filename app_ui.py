@@ -100,10 +100,10 @@ if "db" not in st.session_state:
             
             # 將整理好的雲端資料同步回 session_state
             st.session_state["db"]["manifest_by_order"] = temp_manifest
-            st.success("✅ 雲端 Manifest 數據同步成功！")
+            st.success("雲端 Manifest 數據同步成功！")
             
         except Exception as e:
-            st.error(f"⚠️ 雲端同步失敗。錯誤訊息: {e}")
+            st.error(f" 雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 
