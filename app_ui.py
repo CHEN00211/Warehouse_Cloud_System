@@ -109,6 +109,8 @@ if "db" not in st.session_state:
 
 
 # 5. UI 設定
+if "current_active_tab" not in st.session_state:
+    st.session_state.current_active_tab = "到貨導入"
 tab1, tab2, tab3, tab4 = st.tabs(["到貨導入", "PDA驗收", "歷史單據", "實體盤點"])
 
 
@@ -587,6 +589,7 @@ if "pda_key" not in st.session_state:
 # PART 2: Tab1 CSV 上傳與核心資料處理
 # ==========================================
 with tab1:
+    st.session_state.current_active_tab = "到貨導入"
     if "last_success_msg" in st.session_state and st.session_state["last_success_msg"]:
         st.success(st.session_state["last_success_msg"])
         st.session_state["last_success_msg"] = "" 
@@ -764,6 +767,7 @@ with tab1:
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
 # ==========================================
 with tab2:
+    st.session_state.current_active_tab = "PDA驗收"
     if "current_verified_jan" not in st.session_state:
         st.session_state.current_verified_jan = ""
     if "temp_name_ja" not in st.session_state:
@@ -1212,6 +1216,7 @@ with tab2:
 # PART 5: 整個完整的 Tab3 歷史單據區塊 (消滅負數升級版 - 上)
 # ==========================================
 with tab3:
+    st.session_state.current_active_tab = "歷史單據"
     if st.session_state.lang == "zh":
         st.subheader("查詢")
     else:
@@ -1435,6 +1440,8 @@ with tab3:
 # PART 6: Tab4 實體盤點獨立雲端閘門
 # ==========================================
 with tab4:
+    st.session_state.current_active_tab = "實體盤點"
+    if st.session_state.current_active_tab == "實體盤點":
     # --- 只在 Tab4 範圍內初始化 ---
     if "t4_form_key" not in st.session_state:
         st.session_state.t4_form_key = 0
@@ -1717,3 +1724,4 @@ with tab4:
                 )
     else:
         st.warning(_("目前系統中尚無任何盤點明細，請由上方區域導入您的第一張 CSV 盤點明細", "棚卸伝票がありません。上のフォームからインポートしてください。"))
+        pass 
