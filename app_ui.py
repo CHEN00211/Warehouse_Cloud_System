@@ -863,7 +863,7 @@ with tab2:
                             st.session_state[f"row_count_{selected_order}"] += 1
                             st.rerun()
                     # ==========================================
-                    # PART 4-2 (下): 資料校驗與資料庫持久化回寫
+                    # PART 4-2 (下): 資料校驗與資料庫持久化回寫 (修復 Google Sheet 欄位未增加問題)
                     # ==========================================
                     if submit_btn:
                         is_all_rows_valid = True
@@ -876,7 +876,7 @@ with tab2:
                             c_lot = row_data["lot"].strip()
                             c_exp = row_data["expiry"].strip()
                             
-                            # 取出新增的箱數與箱入數
+                            # 💡 確實取出畫面上填寫（或原 CSV 帶入）的箱數與箱入數
                             c_cases = row_data["cases"]
                             c_per_case = row_data["pcs_per_case"]
                             
@@ -941,14 +941,18 @@ with tab2:
                                 c_actual = v_row["actual"]
                                 c_lot = v_row["lot"]
                                 c_exp = v_row["expiry"]
+                                c_cases = v_row["cases"]          # 💡 新增
+                                c_per_case = v_row["pcs_per_case"] # 💡 新增
                                 
-                                # 💾【實體庫存持久化】確保實體名冊乾淨無損
+                                # 💾【庫存大表持久化】寫入總庫存
                                 db["inventory"].append({
                                     "jan_code": target_jan, 
                                     "name_ja": current_manifest_pool[target_jan]["name_ja"],
                                     "lot_no": c_lot, 
                                     "expiry": c_exp, 
-                                    "stock": c_actual
+                                    "stock": c_actual,
+                                    "actual_cases": c_cases,         # 💡 正式同步至庫存資料庫
+                                    "pcs_per_case": c_per_case       # 💡 正式同步至庫存資料庫
                                 })
                                 
                                 if idx == 0:
@@ -956,9 +960,11 @@ with tab2:
                                     current_manifest_pool[target_jan]["actual_count"] = c_actual
                                     current_manifest_pool[target_jan]["lot_no"] = c_lot
                                     current_manifest_pool[target_jan]["expiry"] = c_exp
+                                    current_manifest_pool[target_jan]["actual_cases"] = c_cases         # 💡 正式同步至目前單據主行
+                                    current_manifest_pool[target_jan]["pcs_per_case"] = c_per_case     # 💡 正式同步至目前單據主行
                                     current_manifest_pool[target_jan]["status"] = "決收點貨"
                                 else:
-                                    # 額外的 Lot 組合自動增開獨立副行，確保在畫面上與 Excel 中拆開呈現
+                                    # 額外的 Lot 組合自動增開獨立副行
                                     sub_key = f"{target_jan}_sub_{idx}_{c_lot}_{c_exp.replace('/', '')}"
                                     current_manifest_pool[sub_key] = {
                                         "name_ja": current_manifest_pool[target_jan]["name_ja"],
@@ -966,12 +972,14 @@ with tab2:
                                         "actual_count": c_actual,
                                         "lot_no": c_lot,
                                         "expiry": c_exp,
+                                        "actual_cases": c_cases,       # 💡 正式同步至目前單據副行
+                                        "pcs_per_case": c_per_case,     # 💡 正式同步至目前單據副行
                                         "status": "決收點貨",
                                         "is_sub_row": True,
                                         "parent_jan": target_jan
                                     }
                             
-                            # 💾 安全同步雲端
+                            # 💾 安全同步雲端 (這會將更新後的欄位直接推送到 Google Sheet 後台)
                             save_data(db)
                             
                             st.success(t["success"])
@@ -982,6 +990,7 @@ with tab2:
                             st.session_state.temp_actual_count = 0
                             st.session_state.show_dup_warning = False
                             st.rerun()
+
 
             st.markdown("---")
             st.text(t["filter_mode"])
