@@ -15,6 +15,35 @@ def get_google_sheet(sheet_name):
     creds = st.secrets["gcp_service_account"]
     gc = gspread.service_account_from_dict(creds)
     return gc.open("Inventory_DB").worksheet(sheet_name)
+# ========================================================
+# 插入段落：ITF 轉 JAN 條碼轉換器 (加在這裡)
+# ========================================================
+def itf_to_jan13(barcode: str) -> str:
+    """如果輸入是 14 位 ITF 碼，自動轉換為 13 位 JAN 碼；其餘原樣返回"""
+    if not barcode:
+        return ""
+        
+    # 清除前後空白與特殊字元
+    barcode = str(barcode).strip()
+    
+    # 檢查是否為 14 位純數字的 ITF 碼
+    if len(barcode) == 14 and barcode.isdigit():
+        # 1. 取出中間的第 2 到 13 碼 (共 12 位數)
+        jan_core = barcode[1:13]
+        
+        # 2. 計算標準的 Modulus 10 檢查碼 (權重 3-1-3-1)
+        # 從最後一位往前算，奇數位置權重 3，偶數位置權重 1
+        odd_sum = sum(int(jan_core[i]) for i in range(0, 12, 2))
+        even_sum = sum(int(jan_core[i]) for i in range(1, 12, 2))
+        
+        total = odd_sum + (even_sum * 3)
+        check_digit = (10 - (total % 10)) % 10
+        
+        # 3. 拼回 13 位的 JAN 碼
+        return jan_core + str(check_digit)
+        
+    return barcode # 如果是 13 位 JAN 碼或其他格式，就直接回傳不變
+# ========================================================    
 
 # 4. 初始化 Session State
 if "db" not in st.session_state:
@@ -638,12 +667,16 @@ with tab2:
             
             def handle_pda_scan_secure():
                 current_key_name = f"pda_input_slot_{selected_order}_{st.session_state.pda_key}"
-                raw_jan = st.session_state[current_key_name].strip()
+                raw_input = st.session_state[current_key_name].strip()
                 
-                if raw_jan and current_manifest_pool:
-                    if raw_jan in current_manifest_pool:
-                        item = current_manifest_pool[raw_jan]
-                        st.session_state.current_verified_jan = raw_jan
+                # 💡 【關鍵改動】呼叫先前定義的工具函式，將 ITF 自動還原成 JAN 碼
+                target_jan = itf_to_jan13(raw_input)
+                
+            if target_jan and current_manifest_pool:
+                    # 後續所有的比對與狀態賦值，全部改用轉換後的 target_jan
+                    if target_jan in current_manifest_pool:
+                        item = current_manifest_pool[target_jan]
+                        st.session_state.current_verified_jan = target_jan
                         st.session_state.temp_name_ja = item["name_ja"]
                         st.session_state.temp_expected_count = item["expected_count"]
                         st.session_state.temp_actual_count = item["expected_count"]  
@@ -652,7 +685,8 @@ with tab2:
                     else:
                         st.session_state.current_verified_jan = "ERROR_NOT_FOUND"
                         st.session_state.pda_error_msg = t["jan_not_found"]
-                st.session_state.pda_key += 1
+            st.session_state.pda_key += 1
+
 
             st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
 
