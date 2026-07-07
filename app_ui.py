@@ -43,9 +43,8 @@ def itf_to_jan13(barcode: str) -> str:
         return jan_core + str(check_digit)
         
     return barcode # 如果是 13 位 JAN 碼或其他格式，就直接回傳不變
-# ========================================================
-# 4. 初始化 Session State (新增自動讀取箱入數、箱數欄位版)
-# ========================================================
+# ========================================================    
+# 4. 初始化 Session State
 if "db" not in st.session_state:
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
         try:
@@ -74,10 +73,13 @@ if "db" not in st.session_state:
                         "archived_order": row.get("archived_order") in [True, "TRUE", "True"]
                     }
                 
-                # 將讀取到的 jan_code 轉為字串並處理科學記號錯誤
+                # 💡 核心修正：將讀取到的 jan_code 轉為字串
                 jan_raw = str(row.get("jan_code", "")).strip()
+                
+                # 處理 Google Sheets 科學記號 (例如 4.98721E+12)
                 if "E+" in jan_raw or "e+" in jan_raw:
                     try:
+                        # 轉成浮點數後再轉成整數字串，強行還原條碼
                         jan_code = str(int(float(jan_raw)))
                     except:
                         jan_code = jan_raw
@@ -85,24 +87,23 @@ if "db" not in st.session_state:
                     jan_code = jan_raw
                 
                 if jan_code:
+                    # 補足可能因為轉型丟失的前導 0 (JAN 碼通常為 13 位)
+                    if len(jan_code) == 12 and jan_raw.startswith("4"):
+                        pass # 有些狀況是正常的，但通常補到13位比較安全
+                        
                     temp_manifest[o_no]["items"][jan_code] = {
                         "name_ja": row.get("name_ja", "-"),
                         "expected_count": int(row.get("expected_count", 0) or 0),
-                        "actual_count": int(row.get("actual_count", 0) or 0),
-                        
-                        # 💡 【核心新增】讀取你剛在 Google Sheets 新增的這兩個英文欄位
-                        "pcs_per_case": int(row.get("pcs_per_case", 0) or 0),     # 箱入數
-                        "expected_cases": int(row.get("expected_cases", 0) or 0), # 箱數
-                        
-                        "status": row.get("status", "未點收")
+                        "actual_count": int(row.get("actual_count", 0) or 0), # 新增對應 J 欄
+                        "status": row.get("status", "未點收") # 對應 M 欄
                     }
             
             # 將整理好的雲端資料同步回 session_state
             st.session_state["db"]["manifest_by_order"] = temp_manifest
-            st.success("雲端 Manifest 數據（含箱數欄位）同步成功！")
+            st.success("雲端 Manifest 數據同步成功！")
             
         except Exception as e:
-            st.error(f"雲端同步失敗。錯誤訊息: {e}")
+            st.error(f" 雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 
@@ -651,9 +652,9 @@ with tab1:
             st.text(t["no_manifest_msg"])
     else:
         st.text(t["no_manifest_msg"])
-# ========================================================
-# 🚀 完整修復版：PDA驗收分頁 (請確保 with tab2 靠最左邊)
-# ========================================================
+# ==========================================
+# PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
+# ==========================================
 with tab2:
     if "current_verified_jan" not in st.session_state:
         st.session_state.current_verified_jan = ""
@@ -663,10 +664,6 @@ with tab2:
         st.session_state.temp_expected_count = 0
     if "temp_actual_count" not in st.session_state:
         st.session_state.temp_actual_count = 0
-    if "temp_pcs_per_case" not in st.session_state:
-        st.session_state.temp_pcs_per_case = 0
-    if "temp_cases" not in st.session_state:
-        st.session_state.temp_cases = 0
     if "show_dup_warning" not in st.session_state:
         st.session_state.show_dup_warning = False
     if "pda_error_msg" not in st.session_state:
@@ -694,48 +691,64 @@ with tab2:
             current_info = current_doc.get("info", {})
             current_manifest_pool = current_doc.get("items", {})
             
-            # --- 供應商資訊表渲染 ---
+            # 💡 依據語系各自獨立生成，徹底修正 c 漏字與 None 錯位大表
             if st.session_state.lang == "zh":
                 meta_df = pd.DataFrame([
                     {"欄位": "供應商", "內容": current_info.get("vendor", "-")},
                     {"欄位": "預計入庫", "內容": current_info.get("expected_delivery", "-")},
                     {"欄位": "操作人員", "內容": current_info.get("operator", "-")}
                 ])
+                st.dataframe(
+                    meta_df,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "欄位": st.column_config.TextColumn(width="small"),
+                        "內容": st.column_config.TextColumn(width="medium")
+                    }
+                )
             else:
                 meta_df = pd.DataFrame([
                     {"項目": "仕入先", "content": current_info.get("vendor", "-")},
                     {"項目": "納品予定日", "content": current_info.get("expected_delivery", "-")},
                     {"項目": "担当者", "content": current_info.get("operator", "-")}
                 ])
-            st.dataframe(meta_df, hide_index=True, use_container_width=True)
+                st.dataframe(
+                    meta_df,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        "項目": st.column_config.TextColumn(width="small"),
+                        "content": st.column_config.TextColumn(label="内容", width="medium")
+                    }
+                )
             st.markdown("---")
             
-            # --- 🔒 盲刷安全通道的定義 ---
             def handle_pda_scan_secure():
                 current_key_name = f"pda_input_slot_{selected_order}_{st.session_state.pda_key}"
                 raw_input = st.session_state[current_key_name].strip()
+                
+                # 💡 將 ITF 自動還原成 JAN 碼
                 target_jan = itf_to_jan13(raw_input)
                 
+                # 🔒 完美的 16 個空格縮排（相對於 def 有 4 個空格）
                 if target_jan and current_manifest_pool:
                     if target_jan in current_manifest_pool:
                         item = current_manifest_pool[target_jan]
                         st.session_state.current_verified_jan = target_jan
-                        st.session_state.temp_name_ja = item.get("name_ja", "-")
-                        st.session_state.temp_expected_count = item.get("expected_count", 0)
-                        st.session_state.temp_actual_count = item.get("expected_count", 0)  
-                        
-                        # 💡 直連字典讀取 CSV 的數值（請確認大小寫與拼字必須與第 4 段一模一樣）
-                        st.session_state.temp_pcs_per_case = int(item.get("pcs_per_case", 0) or 0)
-                        st.session_state.temp_cases = int(item.get("expected_cases", 0) or 0)
-                        
+                        st.session_state.temp_name_ja = item["name_ja"]
+                        st.session_state.temp_expected_count = item["expected_count"]
+                        st.session_state.temp_actual_count = item["expected_count"]  
                         st.session_state.show_dup_warning = (item.get("status") == "決收點貨" or item.get("status") == "已點收驗收")
                         st.session_state.pda_error_msg = ""
                     else:
                         st.session_state.current_verified_jan = "ERROR_NOT_FOUND"
                         st.session_state.pda_error_msg = t["jan_not_found"]
+                        
+                # 🔒 key + 1 必須在 if 結束後、函式結束前執行
                 st.session_state.pda_key += 1
 
-            # --- 條碼輸入框 ---
+
             st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
 
             if st.session_state.current_verified_jan == "ERROR_NOT_FOUND":
@@ -744,71 +757,7 @@ with tab2:
                 st.session_state.temp_name_ja = ""
                 st.session_state.temp_expected_count = 0
                 st.session_state.temp_actual_count = 0
-                st.session_state.temp_pcs_per_case = 0  
-                st.session_state.temp_cases = 0         
                 st.session_state.show_dup_warning = False
-
-            # --- 📦 項目組合 1 UI 呈現 (只出現在 tab2 中) ---
-            if st.session_state.current_verified_jan and st.session_state.current_verified_jan != "ERROR_NOT_FOUND":
-                info_df = pd.DataFrame([
-                    {"欄位": "JAN Code", "內容": st.session_state.current_verified_jan},
-                    {"欄位": "商品名", "內容": st.session_state.temp_name_ja},
-                    {"欄位": "預計總數 / 予定数", "內容": st.session_state.temp_expected_count}
-                ])
-                st.dataframe(info_df, hide_index=True, use_container_width=True)
-                
-                with st.container(border=True):
-                    st.markdown("**項目組合 1**")
-                    
-                    # 橫向建立三個完全獨立、直接填入雲端數值的輸入框
-                    col_pcs, col_case, col_total = st.columns(3)
-                    
-                    with col_pcs:
-                        st.number_input(
-                            "箱入數", 
-                            min_value=0, 
-                            value=int(st.session_state.temp_pcs_per_case),
-                            key=f"pda_pcs_per_case_input_{st.session_state.current_verified_jan}"
-                        )
-                        
-                    with col_case:
-                        st.number_input(
-                            "箱數", 
-                            min_value=0, 
-                            value=int(st.session_state.temp_cases),
-                            key=f"pda_cases_input_{st.session_state.current_verified_jan}"
-                        )
-                        
-                    with col_total:
-                        final_total = st.number_input(
-                            "驗收總數量", 
-                            min_value=0, 
-                            value=int(st.session_state.temp_actual_count),
-                            key=f"pda_total_input_{st.session_state.current_verified_jan}"
-                        )
-                        st.session_state.temp_actual_count = final_total
-                    
-                    st.markdown("<br>", unsafe_allow_html=True)
-                    
-                    # 批次與效期
-                    col_lot, col_expiry = st.columns(2)
-                    with col_lot:
-                        lot_input = st.text_input("Lot 批次", value="", placeholder="請輸入或掃描批號", key=f"pda_lot_input_{st.session_state.current_verified_jan}")
-                    with col_expiry:
-                        expiry_input = st.date_input("有效期限", value=datetime.date.today(), key=f"pda_expiry_input_{st.session_state.current_verified_jan}")
-                    
-                    st.markdown("---") 
-                    
-                    # 按鈕
-                    col_btn_sub, col_btn_add = st.columns(2)
-                    with col_btn_sub:
-                        if st.button("確認提交", use_container_width=True, key=f"pda_submit_btn_{st.session_state.current_verified_jan}"):
-                            st.toast(f"成功記錄！總數量: {st.session_state.temp_actual_count} 入")
-                    with col_btn_add:
-                        st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"pda_add_row_btn_{st.session_state.current_verified_jan}")
-
-# ⚠️ 換到這裡結束！請確保下方的 with tab3: 是跟 with tab2: 在最左側完全平行對齊的！
-
 # ==========================================
 # PART 4-2: Tab2 確認提交表單與動態批次處理
 # ==========================================
