@@ -117,16 +117,15 @@ with col_reboot:
 # ========================================================    
 # 4. 初始化 Session State
 # ========================================================  
-# 💡 關鍵修正點：鎖定當前語系，只要切換後，不論 rerun 多少次都不會洗掉
+# ========================================================    
+# 4. 初始化 Session State
+# ========================================================  
+# 💡 核心修正：在最前面搶先建立語系記憶錨點
 if "lang" not in st.session_state:
-    st.session_state["lang"] = "zh"  # 預設為中文
+    st.session_state["lang"] = "zh"  # 預設為中文，但切換後就不會再被洗掉
 
+# 💡 正確且完美的 Google Sheets 雲端資料庫初始化 (只留一個，結構完整閉合)
 if "db" not in st.session_state:
-    with st.spinner("正在從 Google Sheets 同步雲端數據..."):
-        try:
-            # 先建立一個乾淨的基礎結構
-            st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
-    
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
         try:
             # 先建立一個乾淨的基礎結構
@@ -141,6 +140,44 @@ if "db" not in st.session_state:
                 o_no = str(row.get("order_no", "")).strip()
                 if not o_no:
                     continue
+                
+                # 如果這個單號還沒建立，先初始化它的結構
+                if o_no not in temp_manifest:
+                    temp_manifest[o_no] = {
+                        "info": {
+                            "vendor": str(row.get("vendor", "-")),
+                            "expected_delivery": str(row.get("expected_delive", "-")), 
+                            "operator": str(row.get("operator", "-"))
+                        },
+                        "items": {},
+                        "archived_order": row.get("archived_order") in [True, "TRUE", "True"]
+                    }
+                
+                # 💡 處理條碼字串轉型
+                jan_raw = str(row.get("jan_code", "")).strip()
+                if "E+" in jan_raw or "e+" in jan_raw:
+                    try:
+                        jan_code = str(int(float(jan_raw)))
+                    except:
+                        jan_code = jan_raw
+                else:
+                    jan_code = jan_raw
+                
+                if jan_code:
+                    temp_manifest[o_no]["items"][jan_code] = {
+                        "name_ja": row.get("name_ja", "-"),
+                        "expected_count": int(row.get("expected_count", 0) or 0),
+                        "actual_count": int(row.get("actual_count", 0) or 0), 
+                        "status": row.get("status", "未點收") 
+                    }
+            
+            st.session_state["db"]["manifest_by_order"] = temp_manifest
+            st.success("雲端 Manifest 數據同步成功！")
+            
+        except Exception as e:
+            st.error(f"雲端同步失敗。錯誤訊息: {e}")
+            st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
+
                 
                 # 如果這個單號還沒建立，先初始化它的結構
                 if o_no not in temp_manifest:
