@@ -126,35 +126,28 @@ if "db" not in st.session_state:
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
             manifest_sheet = get_google_sheet("Manifest")  
             raw_records = manifest_sheet.get_all_records()
-            temp_manifest = {}
             
-            # 💡 終極扁平修復：把所有邏輯用扁平方式攤平執行，消滅多層巢狀結構引起的空格地獄！
-            for row in raw_records:
-                o_no = str(row.get("order_no", "")).strip()
-                if not o_no: continue
-                
-                vendor_val = str(row.get("vendor", "-"))
-                delive_val = str(row.get("expected_delive", "-"))
-                operat_val = str(row.get("operator", "-"))
-                is_archived = row.get("archived_order") in [True, "TRUE", "True"]
-                
-                if o_no not in temp_manifest:
-                    temp_manifest[o_no] = {"info": {"vendor": vendor_val, "expected_delivery": delive_val, "operator": operat_val}, "items": {}, "archived_order": is_archived}
-                
-                jan_raw = str(row.get("jan_code", "")).strip()
-                if "E+" in jan_raw or "e+" in jan_raw:
-                    try: jan_code = str(int(float(jan_raw)))
-                    except: jan_code = jan_raw
-                else: jan_code = jan_raw
-                
-                if not jan_code: continue
-                
-                name_ja_val = row.get("name_ja", "-")
-                exp_count_val = int(row.get("expected_count", 0) or 0)
-                act_count_val = int(row.get("actual_count", 0) or 0)
-                status_val = row.get("status", "未點收")
-                
-                temp_manifest[o_no]["items"][jan_code] = {"name_ja": name_ja_val, "expected_count": exp_count_val, "actual_count": act_count_val, "status": status_val}
+            # 💡 世紀終結修正：完全不用 for 迴圈嵌套，直接用單行表達式建立基礎結構，彻底封死任何縮排靈異現象！
+            all_orders = list(set(str(r.get("order_no", "")).strip() for r in raw_records if str(r.get("order_no", "")).strip()))
+            temp_manifest = {
+                o: {
+                    "info": {
+                        "vendor": next((str(r.get("vendor", "-")) for r in raw_records if str(r.get("order_no", "")).strip() == o), "-"),
+                        "expected_delivery": next((str(r.get("expected_delive", "-")) for r in raw_records if str(r.get("order_no", "")).strip() == o), "-"),
+                        "operator": next((str(r.get("operator", "-")) for r in raw_records if str(r.get("order_no", "")).strip() == o), "-")
+                    },
+                    "items": {},
+                    "archived_order": next((r.get("archived_order") in [True, "TRUE", "True"] for r in raw_records if str(r.get("order_no", "")).strip() == o), False)
+                } for o in all_orders
+            }
+            
+            # 💡 第二步：扁平化填入項目，一樣保持單行結構，不留任何讓編輯器混淆 Tab 的空間
+            for r in raw_records:
+                o = str(r.get("order_no", "")).strip()
+                j = str(r.get("jan_code", "")).strip()
+                j = str(int(float(j))) if ("E+" in j or "e+" in j) and j.replace(".","",1).isdigit() else j
+                if o and j and o in temp_manifest:
+                    temp_manifest[o]["items"][j] = {"name_ja": r.get("name_ja", "-"), "expected_count": int(r.get("expected_count", 0) or 0), "actual_count": int(r.get("actual_count", 0) or 0), "status": r.get("status", "未點收")}
             
             st.session_state["db"]["manifest_by_order"] = temp_manifest
             st.success("雲端 Manifest 數據同步成功！")
@@ -162,6 +155,7 @@ if "db" not in st.session_state:
         except Exception as e:
             st.error(f"雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
+
 
 
                 
