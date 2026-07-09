@@ -699,7 +699,7 @@ with tab1:
                         for _, row in df_upload.iterrows():
                             jan_key = str(row["jan_code"]).strip()
                             
-                            # 💡 安全轉型：提取 CSV 中的箱數與箱入數並轉為整數型態
+# 💡 安全轉型：提取 CSV 中的箱數與箱入數並轉為整數型態
                             try:
                                 csv_cases = int(float(row["expected_cases"]))
                                 csv_pcs_per_case = int(float(row["pcs_per_case"]))
@@ -710,13 +710,13 @@ with tab1:
                             db["manifest_by_order"][auto_order_no]["items"][jan_key] = {
                                 "name_ja": row["name_ja"],
                                 "expected_count": int(row["expected_count"]),
-                                "actual_count": int(row["expected_count"]), # 💡 同步調整：初始實到數量直接預設等於預計數量
+                                "actual_count": int(row["expected_count"]), 
                                 "lot_no": "",
                                 "expiry": "",
                                 "status": "未點收",
                                 "expected_cases": csv_cases,       
                                 "pcs_per_case": csv_pcs_per_case,   
-                                "actual_cases": csv_cases  # 💡 關鍵修正：初始實到箱數不要是 0，直接預設為 CSV 上傳的箱數數據
+                                "actual_cases": csv_cases  
                             }
                         
                         prefix = t.get("success_msg_prefix", "上傳成功")
@@ -728,7 +728,7 @@ with tab1:
                         st.session_state.f_f_eta = ""
                         st.session_state.t1_form_key += 1
                         
-                        # 💡 核心修正：將嵌套字典結構攤平成標準的雲端數據列，並加上強行欄位宣告防禦 TypeError
+                        # 💡 核心修正：維持原本的數據結構攤平
                         manifest_sheet = get_google_sheet("Manifest")
                         flattened_rows = []
                         for o_no, doc in db["manifest_by_order"].items():
@@ -750,21 +750,14 @@ with tab1:
                                     "archived_order": str(doc.get("archived_order", False))
                                 })
                                 
-                        # 💡 關鍵修復點：強行宣告 columns 結構，防止 flattened_rows 為空時建立出無效 DataFrame 導致崩潰
-                        target_columns = [
-                            "order_no", "vendor", "expected_delive", "operator", 
-                            "jan_code", "name_ja", "expected_count", "actual_count", 
-                            "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"
-                        ]
-                        save_data(pd.DataFrame(flattened_rows, columns=target_columns), manifest_sheet)
+                        # 💡 關鍵修復點：直接投遞普通 List 清單給最新版的 save_data，拋棄 DataFrame
+                        save_data(flattened_rows, manifest_sheet)
                         st.rerun()
 
                     else:
                         st.error(t["err_csv_header"])
             except ValueError:
                 st.error(t["warning_date_invalid"])
-
-
 
 # ==========================================
 # PART 3: Tab1 底部未入庫單據一覽與刪除功能
