@@ -728,7 +728,7 @@ with tab1:
                         st.session_state.f_f_eta = ""
                         st.session_state.t1_form_key += 1
                         
-                        # 💡 核心修正：將嵌套字典結構攤平成標準的雲端數據列
+                        # 💡 核心修正：將嵌套字典結構攤平成標準的雲端數據列，並加上強行欄位宣告防禦 TypeError
                         manifest_sheet = get_google_sheet("Manifest")
                         flattened_rows = []
                         for o_no, doc in db["manifest_by_order"].items():
@@ -749,13 +749,21 @@ with tab1:
                                     "status": item.get("status", "未點收"),
                                     "archived_order": str(doc.get("archived_order", False))
                                 })
-                        save_data(pd.DataFrame(flattened_rows), manifest_sheet)
+                                
+                        # 💡 關鍵修復點：強行宣告 columns 結構，防止 flattened_rows 為空時建立出無效 DataFrame 導致崩潰
+                        target_columns = [
+                            "order_no", "vendor", "expected_delive", "operator", 
+                            "jan_code", "name_ja", "expected_count", "actual_count", 
+                            "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"
+                        ]
+                        save_data(pd.DataFrame(flattened_rows, columns=target_columns), manifest_sheet)
                         st.rerun()
 
                     else:
                         st.error(t["err_csv_header"])
             except ValueError:
                 st.error(t["warning_date_invalid"])
+
 
 
 # ==========================================
