@@ -115,57 +115,73 @@ with col_reboot:
         st.rerun()
 
 # ========================================================    
-# 4. 初始化 Session State (100% 鋼鐵結構無錯版)
-# ========================================================  
-if "lang" not in st.session_state:
-    st.session_state["lang"] = "zh"
-
+# 4. 初始化 Session State
 if "db" not in st.session_state:
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
         try:
+            # 先建立一個乾淨的基礎結構
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
+            
+            # --- 💡 讀取 Manifest 工作表 ---
             manifest_sheet = get_google_sheet("Manifest")  
             raw_records = manifest_sheet.get_all_records()
             
-            # 使用單行表達式建立基礎結構，徹底封死任何縮排問題
-            all_orders = list(set(str(r.get("order_no", "")).strip() for r in raw_records if str(r.get("order_no", "")).strip()))
-            temp_manifest = {
-                o: {
-                    "info": {
-                        "vendor": next((str(r.get("vendor", "-")) for r in raw_records if str(r.get("order_no", "")).strip() == o), "-"),
-                        "expected_delivery": next((str(r.get("expected_delive", "-")) for r in raw_records if str(r.get("order_no", "")).strip() == o), "-"),
-                        "operator": next((str(r.get("operator", "-")) for r in raw_records if str(r.get("order_no", "")).strip() == o), "-")
-                    },
-                    "items": {},
-                    "archived_order": next((r.get("archived_order") in [True, "TRUE", "True"] for r in raw_records if str(r.get("order_no", "")).strip() == o), False)
-                } for o in all_orders
-            }
+            temp_manifest = {}
+            for row in raw_records:
+                o_no = str(row.get("order_no", "")).strip()
+                if not o_no:
+                    continue
+                
+                # 如果這個單號還沒建立，先初始化它的結構
+                if o_no not in temp_manifest:
+                    temp_manifest[o_no] = {
+                        "info": {
+                            "vendor": str(row.get("vendor", "-")),
+                            "expected_delivery": str(row.get("expected_delive", "-")), 
+                            "operator": str(row.get("operator", "-"))
+                        },
+                        "items": {},
+                        "archived_order": row.get("archived_order") in [True, "TRUE", "True"]
+                    }
+                
+                # 💡 核心修正：將讀取到的 jan_code 轉為字串
+                jan_raw = str(row.get("jan_code", "")).strip()
+                
+                # 處理 Google Sheets 科學記號 (例如 4.98721E+12)
+                if "E+" in jan_raw or "e+" in jan_raw:
+                    try:
+                        # 轉成浮點數後再轉成整數字串，強行還原條碼
+                        jan_code = str(int(float(jan_raw)))
+                    except:
+                        jan_code = jan_raw
+                else:
+                    jan_code = jan_raw
+                
+                if jan_code:
+                    # 補足可能因為轉型丟失的前導 0 (JAN 碼通常為 13 位)
+                    if len(jan_code) == 12 and jan_raw.startswith("4"):
+                        pass # 有些狀況是正常的，打通常補到13位比較安全
+                        
+                    temp_manifest[o_no]["items"][jan_code] = {
+                        "name_ja": row.get("name_ja", "-"),
+                        "expected_count": int(row.get("expected_count", 0) or 0),
+                        "actual_count": int(row.get("actual_count", 0) or 0), # 新增對應 J 欄
+                        "status": row.get("status", "未點收") # 對應 M 欄
+                    }
             
-            # 第二步：扁平化填入項目，保持單行結構
-            for r in raw_records:
-                o = str(r.get("order_no", "")).strip()
-                j = str(r.get("jan_code", "")).strip()
-                j = str(int(float(j))) if ("E+" in j or "e+" in j) and j.replace(".","",1).isdigit() else j
-                if o and j and o in temp_manifest:
-                    temp_manifest[o]["items"][j] = {"name_ja": r.get("name_ja", "-"), "expected_count": int(r.get("expected_count", 0) or 0), "actual_count": int(r.get("actual_count", 0) or 0), "status": r.get("status", "未點收")}
-            
+            # 將整理好的雲端資料同步回 session_state
             st.session_state["db"]["manifest_by_order"] = temp_manifest
             st.success("雲端 Manifest 數據同步成功！")
             
         except Exception as e:
-            st.error(f"雲端同步失敗。錯誤訊息: {e}")
+            st.error(f" 雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 
 # 5. UI 設定
 if "current_active_tab" not in st.session_state:
     st.session_state.current_active_tab = "到貨導入"
-# 💡 最終修復：使用具有永久記憶能力的雙語 Tabs 導覽列，刷新時 100% 留在當前作業分頁！
-titles = ["上傳明細", "PDA驗收", "實體盤點"] if st.session_state["lang"] == "zh" else ["データ取込", "PDA検収", "実地棚卸"]
-
-# 關鍵點：加入 key="main_navigation_tabs" 參數，Streamlit 就會自動鎖定使用者目前點選的分頁，再也不會彈回第一頁！
-tab1, tab2, tab4 = st.tabs(titles, key="main_navigation_tabs")
-
+tab1, tab2, tab4 = st.tabs(["上傳明細", "PDA驗收", "實體盤點"])
 
 
 # ==========================================
@@ -456,24 +472,13 @@ if "db" not in st.session_state:
 db = st.session_state["db"]
 
 # ==========================================
-# 語系與字典設定 (純淨無符號分流版 - 解決刷新跳回中文)
+# 語系與字典設定 (純淨無符號分流版)
 # ==========================================
 if "lang" not in st.session_state:
-    st.session_state["lang"] = "zh"
+    st.session_state.lang = "zh"
 
-# 💡 核心修復：根據當前的記憶狀態，自動決定下拉選單的預設 index（zh 對應 0，ja 對應 1）
-current_lang_idx = 0 if st.session_state["lang"] == "zh" else 1
-
-lang_choice = st.sidebar.selectbox(
-    "Language / 語言切換", 
-    ["繁體中文", "日本語"], 
-    index=current_lang_idx,
-    key="global_language_selector"  # 加上唯一記憶 key，防止刷新時重置
-)
-
-# 同步寫回全域記憶
-st.session_state["lang"] = "zh" if lang_choice == "繁體中文" else "ja"
-
+lang_choice = st.sidebar.selectbox("Language / 語言切換", ["繁體中文", "日本語"])
+st.session_state.lang = "zh" if lang_choice == "繁體中文" else "ja"
 
 i18n = {
     "zh": {
