@@ -19,31 +19,38 @@ def get_google_sheet(sheet_name):
 # ========================================================
 # 新增段落：輕量化儲存函式 (純寫入、不讀取雲端、防標頭遺失)
 # ========================================================
-def save_data(db_df, sheet):
-    """
-    輕量化寫入函式：拔除多餘的雲端讀取，徹底解決轉圈圈卡死。
-    防禦機制：確保資料全刪時，Google Sheets 的第一行標頭永遠都在。
-    """
+# 💡 就是加在這裡！請把整段優化版的 save_data 貼在這邊 💡
+def save_data(rows_list, sheet):
     try:
-        # 定義固定的標準表頭 (請根據您 Manifest 實際的欄位順序調整)
         standard_header = [
             "order_no", "vendor", "expected_delive", "operator", 
             "jan_code", "name_ja", "expected_count", "actual_count", 
             "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"
         ]
-        
-        # 安全防禦：如果資料被全刪，則只補回標頭，不清空整張表
-        if db_df.empty:
+        if not rows_list:
             sheet.clear()
             sheet.append_row(standard_header)
             return True
             
-        # 本地有資料時，將標準表頭與資料轉換為列表合併
-        values_to_write = [standard_header] + db_df.astype(str).values.tolist()
-        
-        # 一次性覆寫，不占用讀取 API
+        values_to_write = [standard_header]
+        for row in rows_list:
+            values_to_write.append([
+                str(row.get("order_no", "-")),
+                str(row.get("vendor", "-")),
+                str(row.get("expected_delive", "-")),
+                str(row.get("operator", "-")),
+                str(row.get("jan_code", "-")),
+                str(row.get("name_ja", "-")),
+                str(row.get("expected_count", 0)),
+                str(row.get("actual_count", 0)),
+                str(row.get("expected_cases", 0)),
+                str(row.get("pcs_per_case", 0)),
+                str(row.get("actual_cases", 0)),
+                str(row.get("status", "未點收")),
+                str(row.get("archived_order", "False"))
+            ])
         sheet.clear()
-        sheet.update(range_name="A1", values=values_to_write)
+        sheet.update(values_to_write, "A1")
         return True
     except Exception as e:
         st.error(f"儲存至雲端失敗: {str(e)}")
