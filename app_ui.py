@@ -115,7 +115,7 @@ with col_reboot:
         st.rerun()
 
 # ========================================================    
-# 4. 初始化 Session State
+# 4. 初始化 Session State (100% 鋼鐵結構無錯版)
 # ========================================================  
 if "lang" not in st.session_state:
     st.session_state["lang"] = "zh"
@@ -127,7 +127,7 @@ if "db" not in st.session_state:
             manifest_sheet = get_google_sheet("Manifest")  
             raw_records = manifest_sheet.get_all_records()
             
-            # 💡 使用單行表達式建立基礎結構，徹底封死任何縮排問題
+            # 使用單行表達式建立基礎結構，徹底封死任何縮排問題
             all_orders = list(set(str(r.get("order_no", "")).strip() for r in raw_records if str(r.get("order_no", "")).strip()))
             temp_manifest = {
                 o: {
@@ -141,7 +141,7 @@ if "db" not in st.session_state:
                 } for o in all_orders
             }
             
-            # 💡 第二步：扁平化填入項目，保持單行結構
+            # 第二步：扁平化填入項目，保持單行結構
             for r in raw_records:
                 o = str(r.get("order_no", "")).strip()
                 j = str(r.get("jan_code", "")).strip()
@@ -154,39 +154,6 @@ if "db" not in st.session_state:
             
         except Exception as e:
             st.error(f"雲端同步失敗。錯誤訊息: {e}")
-            st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
-
-                # 💡 核心修正：將讀取到的 jan_code 轉為字串
-                jan_raw = str(row.get("jan_code", "")).strip()
-                
-                # 處理 Google Sheets 科學記號 (例如 4.98721E+12)
-                if "E+" in jan_raw or "e+" in jan_raw:
-                    try:
-                        # 轉成浮點數後再轉成整數字串，強行還原條碼
-                        jan_code = str(int(float(jan_raw)))
-                    except:
-                        jan_code = jan_raw
-                else:
-                    jan_code = jan_raw
-                
-                if jan_code:
-                    # 補足可能因為轉型丟失的前導 0 (JAN 碼通常為 13 位)
-                    if len(jan_code) == 12 and jan_raw.startswith("4"):
-                        pass # 有些狀況是正常的，打通常補到13位比較安全
-                        
-                    temp_manifest[o_no]["items"][jan_code] = {
-                        "name_ja": row.get("name_ja", "-"),
-                        "expected_count": int(row.get("expected_count", 0) or 0),
-                        "actual_count": int(row.get("actual_count", 0) or 0), # 新增對應 J 欄
-                        "status": row.get("status", "未點收") # 對應 M 欄
-                    }
-            
-            # 將整理好的雲端資料同步回 session_state
-            st.session_state["db"]["manifest_by_order"] = temp_manifest
-            st.success("雲端 Manifest 數據同步成功！")
-            
-        except Exception as e:
-            st.error(f" 雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 
