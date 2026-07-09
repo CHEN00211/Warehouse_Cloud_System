@@ -116,7 +116,17 @@ with col_reboot:
 
 # ========================================================    
 # 4. 初始化 Session State
+# ========================================================  
+# 💡 關鍵修正點：鎖定當前語系，只要切換後，不論 rerun 多少次都不會洗掉
+if "lang" not in st.session_state:
+    st.session_state["lang"] = "zh"  # 預設為中文
+
 if "db" not in st.session_state:
+    with st.spinner("正在從 Google Sheets 同步雲端數據..."):
+        try:
+            # 先建立一個乾淨的基礎結構
+            st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
+    
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
         try:
             # 先建立一個乾淨的基礎結構
@@ -181,7 +191,12 @@ if "db" not in st.session_state:
 # 5. UI 設定
 if "current_active_tab" not in st.session_state:
     st.session_state.current_active_tab = "到貨導入"
-tab1, tab2, tab4 = st.tabs(["上傳明細", "PDA驗收", "實體盤點"])
+# 💡 最終修復：使用具有永久記憶能力的雙語 Tabs 導覽列，刷新時 100% 留在當前作業分頁！
+titles = ["上傳明細", "PDA驗收", "實體盤點"] if st.session_state["lang"] == "zh" else ["データ取込", "PDA検収", "実地棚卸"]
+
+# 關鍵點：加入 key="main_navigation_tabs" 參數，Streamlit 就會自動鎖定使用者目前點選的分頁，再也不會彈回第一頁！
+tab1, tab2, tab4 = st.tabs(titles, key="main_navigation_tabs")
+
 
 
 # ==========================================
@@ -472,13 +487,24 @@ if "db" not in st.session_state:
 db = st.session_state["db"]
 
 # ==========================================
-# 語系與字典設定 (純淨無符號分流版)
+# 語系與字典設定 (純淨無符號分流版 - 解決刷新跳回中文)
 # ==========================================
 if "lang" not in st.session_state:
-    st.session_state.lang = "zh"
+    st.session_state["lang"] = "zh"
 
-lang_choice = st.sidebar.selectbox("Language / 語言切換", ["繁體中文", "日本語"])
-st.session_state.lang = "zh" if lang_choice == "繁體中文" else "ja"
+# 💡 核心修復：根據當前的記憶狀態，自動決定下拉選單的預設 index（zh 對應 0，ja 對應 1）
+current_lang_idx = 0 if st.session_state["lang"] == "zh" else 1
+
+lang_choice = st.sidebar.selectbox(
+    "Language / 語言切換", 
+    ["繁體中文", "日本語"], 
+    index=current_lang_idx,
+    key="global_language_selector"  # 加上唯一記憶 key，防止刷新時重置
+)
+
+# 同步寫回全域記憶
+st.session_state["lang"] = "zh" if lang_choice == "繁體中文" else "ja"
+
 
 i18n = {
     "zh": {
