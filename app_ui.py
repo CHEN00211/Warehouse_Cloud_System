@@ -784,8 +784,7 @@ with tab1:
                                 values_to_write = [header] + flattened_rows
                             else:
                                 values_to_write = [header]
-                                
-                            # 💡 內建三層語法相容備援，全面瓦解 gspread 所有版本更新引發的 TypeError
+    # 💡 內建三層語法相容備援，全面瓦解 gspread 所有版本更新引發的 TypeError
                             try:
                                 manifest_sheet.update(values_to_write, "A1")
                             except:
@@ -798,22 +797,30 @@ with tab1:
 
                         st.rerun()
 
-    # 1. 導入新實體盤點名冊
-    st.subheader(_("1. 盤點明細", "1. 棚卸データ"))
+                    else:
+                        st.error(t["err_csv_header"])
+            except ValueError:
+                st.error(t["warning_date_invalid"])
+
+    # ========================================================
+    # 💡 核心修復：把盤點名冊上傳功能「整塊獨立包裹」在 with tab1 內部（4個空格縮排）
+    # ========================================================
+    st.markdown("---")
+    st.subheader(_("1. 導入實體盤點名冊", "1. 棚卸データのインポート"))
     
     col_inv_up1, col_inv_up2 = st.columns(2)
     with col_inv_up1:
-        inv_sheet_id = st.text_input(_("盤點單號(必填)", "棚卸番号(必須)"), key=f"inv_sheet_id_input_t4_{st.session_state.t4_form_key}").strip()
+        inv_sheet_id = st.text_input(_("盤點單號(必填)", "棚卸番号(必須)"), key=f"inv_sheet_id_input_t1_move_{st.session_state.t4_form_key}").strip()
     with col_inv_up2:
-        inv_operator = st.text_input(_("盤點人員 (必填)", "担当者 (必須)"), key=f"inv_operator_input_t4_{st.session_state.t4_form_key}").strip()
+        inv_operator = st.text_input(_("盤點人員 (必填)", "担当者 (必須)"), key=f"inv_operator_input_t1_move_{st.session_state.t4_form_key}").strip()
         
     uploaded_inv_file = st.file_uploader(
         _("上傳盤點明細 CSV (格式: jan_code, name_ja, location, expiry, stock)", "棚卸明細CSVをアップロード (jan_code, name_ja, location, expiry, stock)"), 
         type=["csv"], 
-        key=f"uploaded_inv_file_uploader_t4_{st.session_state.t4_form_key}"
+        key=f"uploaded_inv_file_uploader_t1_move_{st.session_state.t4_form_key}"
     )
     
-    if st.button(_("確認", "登録"), type="primary", key="submit_new_inv_sheet_btn_t4"):
+    if st.button(_("確認導入盤點明細", "棚卸登録"), type="primary", key="submit_new_inv_sheet_btn_t1_move"):
         if not inv_sheet_id or not inv_operator or uploaded_inv_file is None:
             st.error(_("錯誤：請填寫盤點單號、人員並上傳 CSV 檔案", "エラー：棚卸番号、担当者、CSVファイルを入力・添付してください"))
         else:
@@ -855,11 +862,6 @@ with tab1:
     if "msg_success" in st.session_state and st.session_state["msg_success"]:
         st.success(st.session_state["msg_success"])
         st.session_state["msg_success"] = None
-               
-                    else:
-                        st.error(t["err_csv_header"])
-            except ValueError:
-                st.error(t["warning_date_invalid"])
 
 
 # ==========================================
@@ -872,7 +874,8 @@ with tab1:
         history_data = []
         active_orders = []
         sorted_orders = sorted(list(db["manifest_by_order"].keys()), reverse=True)
-        
+                            
+
         display_idx = 1
         for o_no in sorted_orders:
             doc = db["manifest_by_order"][o_no]
