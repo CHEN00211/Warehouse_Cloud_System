@@ -181,7 +181,7 @@ if "db" not in st.session_state:
 # 5. UI 設定
 if "current_active_tab" not in st.session_state:
     st.session_state.current_active_tab = "到貨導入"
-tab1, tab2, tab4 = st.tabs(["到貨導入", "PDA驗收", "實體盤點"])
+tab1, tab2, tab4 = st.tabs(["上傳明細", "PDA驗收", "實體盤點"])
 
 
 # ==========================================
@@ -662,7 +662,7 @@ with tab1:
     st.session_state.current_active_tab = "到貨導入"
     if "last_success_msg" in st.session_state and st.session_state["last_success_msg"]:
         st.success(st.session_state["last_success_msg"])
-        st.session_state["last_success_msg"] = "" 
+        st.session_state["last_success_msg"] = "1. 上傳到貨明細" 
 
     col_imp1, col_imp2, col_imp3 = st.columns(3)
     with col_imp1:
@@ -816,7 +816,7 @@ with tab1:
     def _t1_local_lang(zh, ja):
         return zh if is_t1_zh else ja
 
-    st.subheader(_t1_local_lang("1. 導入實體盤點名冊", "1. 棚卸データのインポート"))
+    st.subheader(_t1_local_lang("1. 上傳盤點明細", "1. 棚卸データのインポート"))
     
     col_inv_up1, col_inv_up2 = st.columns(2)
     with col_inv_up1:
