@@ -1696,7 +1696,7 @@ with tab4:
                         with st.container(border=True):
                             if has_counted:
                                 st.error(_("提示：此商品之前已完成盤點！", "注意：この商品は既に棚卸完了しています！"))
-                            col_det, col_warn = st.columns([3, 2])
+                            col_det, col_warn = st.columns(2)  # 💡 這裡加上 2，修正剛才可能漏掉的參數
                             with col_det:
                                 st.markdown(f"{_('貨位', 'ロケーション')}： `{target_item.get('location', '無')}`")
                                 st.markdown(f"{_('效期', '使用期限')}： `{target_item.get('expiry', '無')}`")
@@ -1711,6 +1711,7 @@ with tab4:
                                 input_results[m_idx] = actual_input
                     
                     st.markdown(" ")
+                    # 💡 這裡的 if 按鈕有自己獨立的範圍，不配 else 也是完全正確的
                     if st.button(_("確認提交", "確定"), type="primary", use_container_width=True, key=f"pda_confirm_all_btn_{selected_sheet}", disabled=not allow_submit):
                         for idx_key, qty_val in input_results.items():
                             t4_data["inventory_sheets"][selected_sheet]["items"][idx_key]["actual_stock"] = qty_val
@@ -1719,6 +1720,7 @@ with tab4:
                         st.session_state[f"scan_counter_{selected_sheet}"] += 1
                         st.success(_("條碼資料已確認更新！", "データが更新されました！"))
                         st.rerun()
+
 
             # 3. 盤點進度動態清單
             st.markdown("---")
