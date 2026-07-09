@@ -804,11 +804,14 @@ with tab1:
                 st.error(t["warning_date_invalid"])
 
     # ========================================================
-    # 💡 成功嵌入：將原本 Tab 4 的「導入實體盤點名冊」併入此處 (就地初始化防禦 NameError)
+    # 💡 終極修復：將盤點名冊上傳功能併入此處 (新增全域變數防禦，徹底消滅 AttributeError)
     # ========================================================
     st.markdown("---")
     
-    # 💡 關鍵修復點：就地建立獨立的雙語判斷，防止搬家後找不到該函式而引發 NameError 崩潰
+    # 💡 核心修復點 1：就地防禦初始化，防止使用者一開網頁時因找不到變數而爆出 AttributeError 崩潰
+    if "t4_form_key" not in st.session_state:
+        st.session_state.t4_form_key = 0
+        
     is_t1_zh = getattr(st.session_state, "lang", "zh") == "zh"
     def _t1_local_lang(zh, ja):
         return zh if is_t1_zh else ja
