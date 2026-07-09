@@ -117,14 +117,11 @@ with col_reboot:
 # ========================================================    
 # 4. 初始化 Session State
 # ========================================================  
-# ========================================================    
-# 4. 初始化 Session State
-# ========================================================  
 # 💡 核心修正：在最前面搶先建立語系記憶錨點
 if "lang" not in st.session_state:
     st.session_state["lang"] = "zh"  # 預設為中文，但切換後就不會再被洗掉
 
-# 💡 正確且完美的 Google Sheets 雲端資料庫初始化 (只留一個，結構完整閉合)
+# 💡 正確且完美的 Google Sheets 雲端資料庫初始化 (縮排嚴格校正版)
 if "db" not in st.session_state:
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
         try:
@@ -177,6 +174,7 @@ if "db" not in st.session_state:
         except Exception as e:
             st.error(f"雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
+ 
 
                 
                 # 如果這個單號還沒建立，先初始化它的結構
