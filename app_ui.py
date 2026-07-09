@@ -801,7 +801,6 @@ with tab1:
         if history_data:
             st.dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
             
-        # 💡 這段有幫你保留所有的刪除邏輯，並且修正了縮排與 save_data 參數，請完全覆蓋它
         col_del1, col_del2 = st.columns(2)
         with col_del1:
             target_to_delete = st.selectbox(t["del_select_label"], options=active_orders, key="delete_order_select", label_visibility="collapsed")
@@ -809,14 +808,12 @@ with tab1:
             if st.button(t["del_btn_label"], type="primary", use_container_width=True):
                 if target_to_delete in db["manifest_by_order"]:
                     del db["manifest_by_order"][target_to_delete]
-                    # 💡 這裡同步換成最新的輕量儲存，避免刪除時卡死
                     manifest_sheet = get_google_sheet("Manifest")
                     save_data(pd.DataFrame(db["manifest_by_order"]), manifest_sheet)
                     st.rerun()
     else:
         st.text(t["no_manifest_msg"])
-else:
-    st.text(t["no_manifest_msg"])
+
 
 # ==========================================
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
