@@ -803,24 +803,33 @@ with tab1:
             except ValueError:
                 st.error(t["warning_date_invalid"])
 
-    # 1. 導入新實體盤點名冊
-    st.subheader(_("1. 盤點明細", "1. 棚卸データ"))
+    # ========================================================
+    # 💡 成功嵌入：將原本 Tab 4 的「導入實體盤點名冊」併入此處 (就地初始化防禦 NameError)
+    # ========================================================
+    st.markdown("---")
+    
+    # 💡 關鍵修復點：就地建立獨立的雙語判斷，防止搬家後找不到該函式而引發 NameError 崩潰
+    is_t1_zh = getattr(st.session_state, "lang", "zh") == "zh"
+    def _t1_local_lang(zh, ja):
+        return zh if is_t1_zh else ja
+
+    st.subheader(_t1_local_lang("1. 導入實體盤點名冊", "1. 棚卸データのインポート"))
     
     col_inv_up1, col_inv_up2 = st.columns(2)
     with col_inv_up1:
-        inv_sheet_id = st.text_input(_("盤點單號(必填)", "棚卸番号(必須)"), key=f"inv_sheet_id_input_t4_{st.session_state.t4_form_key}").strip()
+        inv_sheet_id = st.text_input(_t1_local_lang("盤點單號(必填)", "棚卸番号(必須)"), key=f"inv_sheet_id_input_t1_move_{st.session_state.t4_form_key}").strip()
     with col_inv_up2:
-        inv_operator = st.text_input(_("盤點人員 (必填)", "担当者 (必須)"), key=f"inv_operator_input_t4_{st.session_state.t4_form_key}").strip()
+        inv_operator = st.text_input(_t1_local_lang("盤點人員 (必填)", "担当者 (必須)"), key=f"inv_operator_input_t1_move_{st.session_state.t4_form_key}").strip()
         
     uploaded_inv_file = st.file_uploader(
-        _("上傳盤點明細 CSV (格式: jan_code, name_ja, location, expiry, stock)", "棚卸明細CSVをアップロード (jan_code, name_ja, location, expiry, stock)"), 
+        _t1_local_lang("上傳盤點明細 CSV (格式: jan_code, name_ja, location, expiry, stock)", "棚卸明細CSVをアップロード (jan_code, name_ja, location, expiry, stock)"), 
         type=["csv"], 
-        key=f"uploaded_inv_file_uploader_t4_{st.session_state.t4_form_key}"
+        key=f"uploaded_inv_file_uploader_t1_move_{st.session_state.t4_form_key}"
     )
     
-    if st.button(_("確認", "登録"), type="primary", key="submit_new_inv_sheet_btn_t4"):
+    if st.button(_t1_local_lang("確認導入盤點明細", "棚卸登録"), type="primary", key="submit_new_inv_sheet_btn_t1_move"):
         if not inv_sheet_id or not inv_operator or uploaded_inv_file is None:
-            st.error(_("錯誤：請填寫盤點單號、人員並上傳 CSV 檔案", "エラー：棚卸番号、担当者、CSVファイルを入力・添付してください"))
+            st.error(_t1_local_lang("錯誤：請填寫盤點單號、人員並上傳 CSV 檔案", "エラー：棚卸番号、担当者、CSVファイルを入力・添付してください"))
         else:
             try:
                 df_inv_upload = pd.read_csv(uploaded_inv_file, dtype={"jan_code": str, "location": str, "expiry": str})
@@ -849,12 +858,12 @@ with tab1:
                     _tab4_isolated_save(t4_data)
                     st.session_state.t4_form_key += 1
                     st.session_state["clear_t4_form"] = True
-                    st.session_state["msg_success"] = _(f"成功導入盤點明細：{inv_sheet_id}", f"棚卸明細 {inv_sheet_id} が登録されました")
+                    st.session_state["msg_success"] = _t1_local_lang(f"成功導入盤點明細：{inv_sheet_id}", f"棚卸明細 {inv_sheet_id} が登録されました")
                     st.rerun()
                 else:
-                    st.error(_("CSV欄位錯誤，必須包含: jan_code, name_ja, location, expiry, stock", "CSVヘッダー不正: jan_code, name_ja, location, expiry, stock"))
+                    st.error(_t1_local_lang("CSV欄位錯誤，必須包含: jan_code, name_ja, location, expiry, stock", "CSVヘッダー不正: jan_code, name_ja, location, expiry, stock"))
             except Exception as e:
-                st.error(f"{_('解析錯誤', '解析エラー')}: {str(e)}")
+                st.error(f"{_t1_local_lang('解析錯誤', '解析エラー')}: {str(e)}")
     
     # 檢查是否有成功訊息
     if "msg_success" in st.session_state and st.session_state["msg_success"]:
