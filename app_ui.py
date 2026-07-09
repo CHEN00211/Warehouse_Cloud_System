@@ -809,11 +809,10 @@ with tab1:
                 st.error(t["warning_date_invalid"])
 
     # ========================================================
-    # 💡 終極修復：將盤點名冊上傳功能併入此處 (新增全域變數防禦，徹底消滅 AttributeError)
+    # 💡 成功嵌入：2. 上傳盤點明細 區塊 (徹底根治 t4_data 找不到的 NameError)
     # ========================================================
     st.markdown("---")
     
-    # 💡 核心修復點 1：就地防禦初始化，防止使用者一開網頁時因找不到變數而爆出 AttributeError 崩潰
     if "t4_form_key" not in st.session_state:
         st.session_state.t4_form_key = 0
         
@@ -821,6 +820,7 @@ with tab1:
     def _t1_local_lang(zh, ja):
         return zh if is_t1_zh else ja
 
+    # 標題已精準修改為：2. 上傳盤點明細
     st.subheader(_t1_local_lang("2. 上傳盤點明細", "2. 棚卸データのインポート"))
     
     col_inv_up1, col_inv_up2 = st.columns(2)
@@ -840,11 +840,30 @@ with tab1:
             st.error(_t1_local_lang("錯誤：請填寫盤點單號、人員並上傳 CSV 檔案", "エラー：棚卸番号、担当者、CSVファイルを入力・添付してください"))
         else:
             try:
+                # 💡 關鍵修復點 1：就地連線、就地讀取雲端最新數據，不依賴後方分頁變數
+                sheet_t4_local = get_google_sheet("tab4")
+                raw_data_t4_local = sheet_t4_local.get_all_records()
+                
+                # 在記憶體中重組盤點結構
+                local_t4_data = {"inventory_sheets": {}}
+                for row_data in raw_data_t4_local:
+                    s_id = str(row_data.get("sheet_id", "default")).strip()
+                    if s_id not in local_t4_data["inventory_sheets"]:
+                        local_t4_data["inventory_sheets"][s_id] = {"info": {"operator": str(row_data.get("operator", "")), "upload_date": str(row_data.get("upload_date", ""))}, "items": []}
+                    
+                    val_counted = row_data.get("is_counted", False)
+                    if isinstance(val_counted, str):
+                        row_data["is_counted"] = val_counted.lower() in ['true', '1', 'yes']
+                    else:
+                        row_data["is_counted"] = bool(val_counted)
+                    local_t4_data["inventory_sheets"][s_id]["items"].append(row_data)
+
+                # 💡 解析當前上傳的 CSV 檔案
                 df_inv_upload = pd.read_csv(uploaded_inv_file, dtype={"jan_code": str, "location": str, "expiry": str})
                 required_inv_cols = ["jan_code", "name_ja", "location", "expiry", "stock"]
                 
                 if all(col in df_inv_upload.columns for col in required_inv_cols):
-                    t4_data["inventory_sheets"][inv_sheet_id] = {
+                    local_t4_data["inventory_sheets"][inv_sheet_id] = {
                         "info": {
                             "operator": inv_operator,
                             "upload_date": datetime.datetime.now().strftime("%Y/%m/%d %H:%M:%S")
@@ -853,7 +872,7 @@ with tab1:
                     }
                     
                     for i, row in df_inv_upload.iterrows():
-                        t4_data["inventory_sheets"][inv_sheet_id]["items"].append({
+                        local_t4_data["inventory_sheets"][inv_sheet_id]["items"].append({
                             "jan_code": str(row["jan_code"]).strip(),
                             "name_ja": str(row["name_ja"]).strip(),
                             "location": str(row["location"]).strip() if pd.notna(row["location"]) else "",
@@ -863,7 +882,18 @@ with tab1:
                             "actual_stock": 0
                         })
                         
-                    _tab4_isolated_save(t4_data)
+                    # 💡 關鍵修復點 2：就地進行物理平鋪與純寫入雲端工作表，擺脫外部函式依賴
+                    all_rows_to_save = []
+                    for s_id, content in local_t4_data["inventory_sheets"].items():
+                        for item in content["items"]:
+                            item["sheet_id"] = s_id  
+                            all_rows_to_save.append(item)
+                    
+                    df_to_save = pd.DataFrame(all_rows_to_save)
+                    sheet_t4_local.clear()
+                    if not df_to_save.empty:
+                        sheet_t4_local.update([df_to_save.columns.values.tolist()] + df_to_save.values.tolist())
+                        
                     st.session_state.t4_form_key += 1
                     st.session_state["clear_t4_form"] = True
                     st.session_state["msg_success"] = _t1_local_lang(f"成功導入盤點明細：{inv_sheet_id}", f"棚卸明細 {inv_sheet_id} が登録されました")
