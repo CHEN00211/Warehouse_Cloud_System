@@ -728,12 +728,15 @@ with tab1:
                         st.session_state.f_f_eta = ""
                         st.session_state.t1_form_key += 1
                         
-                        save_data(db)
+                        # 💡 核心修正：改用輕量化 save_data，傳入轉換後的 DataFrame 與指定工作表
+                        manifest_sheet = get_google_sheet("Manifest")
+                        save_data(pd.DataFrame(db["manifest_by_order"]), manifest_sheet)
                         st.rerun()
                     else:
                         st.error(t["err_csv_header"])
             except ValueError:
                 st.error(t["warning_date_invalid"])
+
 
 # ==========================================
 # PART 3: Tab1 底部未入庫單據一覽與刪除功能
@@ -798,19 +801,23 @@ with tab1:
         if history_data:
             st.dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
             
-            col_del1, col_del2 = st.columns(2)
-            with col_del1:
-                target_to_delete = st.selectbox(t["del_select_label"], options=active_orders, key="delete_order_select", label_visibility="collapsed")
-            with col_del2:
-                if st.button(t["del_btn_label"], type="primary", use_container_width=True):
-                    if target_to_delete in db["manifest_by_order"]:
-                        del db["manifest_by_order"][target_to_delete]
-                        save_data(db)
-                        st.rerun()
-        else:
-            st.text(t["no_manifest_msg"])
+        # 💡 這段有幫你保留所有的刪除邏輯，並且修正了縮排與 save_data 參數，請完全覆蓋它
+        col_del1, col_del2 = st.columns(2)
+        with col_del1:
+            target_to_delete = st.selectbox(t["del_select_label"], options=active_orders, key="delete_order_select", label_visibility="collapsed")
+        with col_del2:
+            if st.button(t["del_btn_label"], type="primary", use_container_width=True):
+                if target_to_delete in db["manifest_by_order"]:
+                    del db["manifest_by_order"][target_to_delete]
+                    # 💡 這裡同步換成最新的輕量儲存，避免刪除時卡死
+                    manifest_sheet = get_google_sheet("Manifest")
+                    save_data(pd.DataFrame(db["manifest_by_order"]), manifest_sheet)
+                    st.rerun()
     else:
         st.text(t["no_manifest_msg"])
+else:
+    st.text(t["no_manifest_msg"])
+
 # ==========================================
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
 # ==========================================
@@ -1140,7 +1147,8 @@ with tab2:
                                     }
                             
                             # 💾 安全同步雲端 (這會將更新後的欄位直接推送到 Google Sheet 後台)
-                            save_data(db)
+                            manifest_sheet = get_google_sheet("Manifest")
+                            save_data(pd.DataFrame(db["manifest_by_order"]), manifest_sheet)
                             
                             st.success(t["success"])
                             st.session_state[f"row_count_{selected_order}"] = 1
@@ -1150,6 +1158,7 @@ with tab2:
                             st.session_state.temp_actual_count = 0
                             st.session_state.show_dup_warning = False
                             st.rerun()
+
 
 
             st.markdown("---")
