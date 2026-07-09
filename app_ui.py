@@ -117,56 +117,44 @@ with col_reboot:
 # ========================================================    
 # 4. 初始化 Session State
 # ========================================================  
-# 💡 核心修正：在最前面搶先建立語系記憶錨點
 if "lang" not in st.session_state:
-    st.session_state["lang"] = "zh"  # 預設為中文，但切換後就不會再被洗掉
+    st.session_state["lang"] = "zh"
 
-# 💡 正確且完美的 Google Sheets 雲端資料庫初始化 (縮排嚴格校正版)
 if "db" not in st.session_state:
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
         try:
-            # 先建立一個乾淨的基礎結構
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
-            
-            # --- 💡 讀取 Manifest 工作表 ---
             manifest_sheet = get_google_sheet("Manifest")  
             raw_records = manifest_sheet.get_all_records()
-            
             temp_manifest = {}
+            
+            # 💡 終極扁平修復：把所有邏輯用扁平方式攤平執行，消滅多層巢狀結構引起的空格地獄！
             for row in raw_records:
                 o_no = str(row.get("order_no", "")).strip()
-                if not o_no:
-                    continue
+                if not o_no: continue
                 
-                # 如果這個單號還沒建立，先初始化它的結構
+                vendor_val = str(row.get("vendor", "-"))
+                delive_val = str(row.get("expected_delive", "-"))
+                operat_val = str(row.get("operator", "-"))
+                is_archived = row.get("archived_order") in [True, "TRUE", "True"]
+                
                 if o_no not in temp_manifest:
-                    temp_manifest[o_no] = {
-                        "info": {
-                            "vendor": str(row.get("vendor", "-")),
-                            "expected_delivery": str(row.get("expected_delive", "-")), 
-                            "operator": str(row.get("operator", "-"))
-                        },
-                        "items": {},
-                        "archived_order": row.get("archived_order") in [True, "TRUE", "True"]
-                    }
+                    temp_manifest[o_no] = {"info": {"vendor": vendor_val, "expected_delivery": delive_val, "operator": operat_val}, "items": {}, "archived_order": is_archived}
                 
-                # 💡 處理條碼字串轉型
                 jan_raw = str(row.get("jan_code", "")).strip()
                 if "E+" in jan_raw or "e+" in jan_raw:
-                    try:
-                        jan_code = str(int(float(jan_raw)))
-                    except:
-                        jan_code = jan_raw
-                else:
-                    jan_code = jan_raw
+                    try: jan_code = str(int(float(jan_raw)))
+                    except: jan_code = jan_raw
+                else: jan_code = jan_raw
                 
-                if jan_code:
-                    temp_manifest[o_no]["items"][jan_code] = {
-                        "name_ja": row.get("name_ja", "-"),
-                        "expected_count": int(row.get("expected_count", 0) or 0),
-                        "actual_count": int(row.get("actual_count", 0) or 0), 
-                        "status": row.get("status", "未點收") 
-                    }
+                if not jan_code: continue
+                
+                name_ja_val = row.get("name_ja", "-")
+                exp_count_val = int(row.get("expected_count", 0) or 0)
+                act_count_val = int(row.get("actual_count", 0) or 0)
+                status_val = row.get("status", "未點收")
+                
+                temp_manifest[o_no]["items"][jan_code] = {"name_ja": name_ja_val, "expected_count": exp_count_val, "actual_count": act_count_val, "status": status_val}
             
             st.session_state["db"]["manifest_by_order"] = temp_manifest
             st.success("雲端 Manifest 數據同步成功！")
@@ -174,7 +162,7 @@ if "db" not in st.session_state:
         except Exception as e:
             st.error(f"雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
- 
+
 
                 
                 # 如果這個單號還沒建立，先初始化它的結構
