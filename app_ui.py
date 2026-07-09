@@ -728,10 +728,30 @@ with tab1:
                         st.session_state.f_f_eta = ""
                         st.session_state.t1_form_key += 1
                         
-                        # 💡 核心修正：改用輕量化 save_data，傳入轉換後的 DataFrame 與指定工作表
+                        # 💡 核心修正：將嵌套字典結構攤平成標準的雲端數據列
                         manifest_sheet = get_google_sheet("Manifest")
-                        save_data(pd.DataFrame(db["manifest_by_order"]), manifest_sheet)
+                        flattened_rows = []
+                        for o_no, doc in db["manifest_by_order"].items():
+                            info = doc.get("info", {})
+                            for jan_code, item in doc.get("items", {}).items():
+                                flattened_rows.append({
+                                    "order_no": o_no,
+                                    "vendor": info.get("vendor", "-"),
+                                    "expected_delive": info.get("expected_delivery", "-"),
+                                    "operator": info.get("operator", "-"),
+                                    "jan_code": jan_code,
+                                    "name_ja": item.get("name_ja", "-"),
+                                    "expected_count": item.get("expected_count", 0),
+                                    "actual_count": item.get("actual_count", 0),
+                                    "expected_cases": item.get("expected_cases", 0),
+                                    "pcs_per_case": item.get("pcs_per_case", 0),
+                                    "actual_cases": item.get("actual_cases", 0),
+                                    "status": item.get("status", "未點收"),
+                                    "archived_order": str(doc.get("archived_order", False))
+                                })
+                        save_data(pd.DataFrame(flattened_rows), manifest_sheet)
                         st.rerun()
+
                     else:
                         st.error(t["err_csv_header"])
             except ValueError:
@@ -808,9 +828,30 @@ with tab1:
             if st.button(t["del_btn_label"], type="primary", use_container_width=True):
                 if target_to_delete in db["manifest_by_order"]:
                     del db["manifest_by_order"][target_to_delete]
+                    # 💡 核心修正：將刪除後的嵌套字典結構攤平成標準數據列
                     manifest_sheet = get_google_sheet("Manifest")
-                    save_data(pd.DataFrame(db["manifest_by_order"]), manifest_sheet)
+                    flattened_rows = []
+                    for o_no, doc in db["manifest_by_order"].items():
+                        info = doc.get("info", {})
+                        for jan_code, item in doc.get("items", {}).items():
+                            flattened_rows.append({
+                                "order_no": o_no,
+                                "vendor": info.get("vendor", "-"),
+                                "expected_delive": info.get("expected_delivery", "-"),
+                                "operator": info.get("operator", "-"),
+                                "jan_code": jan_code,
+                                "name_ja": item.get("name_ja", "-"),
+                                "expected_count": item.get("expected_count", 0),
+                                "actual_count": item.get("actual_count", 0),
+                                "expected_cases": item.get("expected_cases", 0),
+                                "pcs_per_case": item.get("pcs_per_case", 0),
+                                "actual_cases": item.get("actual_cases", 0),
+                                "status": item.get("status", "未點收"),
+                                "archived_order": str(doc.get("archived_order", False))
+                            })
+                    save_data(pd.DataFrame(flattened_rows), manifest_sheet)
                     st.rerun()
+
     else:
         st.text(t["no_manifest_msg"])
 
@@ -1143,19 +1184,29 @@ with tab2:
                                         "parent_jan": target_jan
                                     }
                             
-                            # 💾 安全同步雲端 (這會將更新後的欄位直接推送到 Google Sheet 後台)
+                            # 💡 核心修正：將點收/結案後的嵌套字典結構攤平成標準數據列
                             manifest_sheet = get_google_sheet("Manifest")
-                            save_data(pd.DataFrame(db["manifest_by_order"]), manifest_sheet)
-                            
-                            st.success(t["success"])
-                            st.session_state[f"row_count_{selected_order}"] = 1
-                            st.session_state.current_verified_jan = ""
-                            st.session_state.temp_name_ja = ""
-                            st.session_state.temp_expected_count = 0
-                            st.session_state.temp_actual_count = 0
-                            st.session_state.show_dup_warning = False
+                            flattened_rows = []
+                            for o_no, doc in db["manifest_by_order"].items():
+                                info = doc.get("info", {})
+                                for jan_code, item in doc.get("items", {}).items():
+                                    flattened_rows.append({
+                                        "order_no": o_no,
+                                        "vendor": info.get("vendor", "-"),
+                                        "expected_delive": info.get("expected_delivery", "-"),
+                                        "operator": info.get("operator", "-"),
+                                        "jan_code": jan_code,
+                                        "name_ja": item.get("name_ja", "-"),
+                                        "expected_count": item.get("expected_count", 0),
+                                        "actual_count": item.get("actual_count", 0),
+                                        "expected_cases": item.get("expected_cases", 0),
+                                        "pcs_per_case": item.get("pcs_per_case", 0),
+                                        "actual_cases": item.get("actual_cases", 0),
+                                        "status": item.get("status", "未點收"),
+                                        "archived_order": str(doc.get("archived_order", False))
+                                    })
+                            save_data(pd.DataFrame(flattened_rows), manifest_sheet)
                             st.rerun()
-
 
 
             st.markdown("---")
