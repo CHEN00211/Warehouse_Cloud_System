@@ -9,10 +9,10 @@ import datetime
 # 1. 頁面設定 (必須是第一行，不可更動)
 # ========================================================
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
-st.title("到貨驗收系統")
+st.title(" 到貨驗收系統")
 
 # ========================================================
-# 2. 定義連線與輕量化儲存函式
+# 2. 定義連線與輕量化儲存函式 (維持防禦機制)
 # ========================================================
 def get_google_sheet(sheet_name):
     """確保 Secrets 設定在 Streamlit Cloud 中"""
@@ -36,13 +36,13 @@ def save_data(db_df, sheet):
         # 防禦機制：如果本地 DataFrame 資料全刪或為空
         if db_df.empty:
             sheet.clear()  # 清空整張表
-            sheet.append_row(standard_header)  # 重新補回第一行標準表頭，確保不遺失
+            sheet.append_row(standard_header)  # 重新補回第一行標準表頭
             return True
             
         # 本地有資料，將 DataFrame 轉換為寫入格式
         values_to_write = [standard_header] + db_df.astype(str).values.tolist()
         
-        # 一次性覆寫 Google Sheets (效率最高，不占 API 讀取額度)
+        # 一次性覆寫 Google Sheets
         sheet.clear()
         sheet.update(range_name="A1", values=values_to_write)
         return True
@@ -69,15 +69,13 @@ def itf_to_jan13(barcode: str) -> str:
     return barcode 
 
 # ========================================================    
-# 4. 全域控制：Reboot 機制（防止一直轉圈圈卡死）
+# 4. 全域控制：Reboot 機制
 # ========================================================
 if "reboot_trigger" not in st.session_state:
     st.session_state.reboot_trigger = False
 
-# 頂部控制欄位
-col_reboot, _ = st.columns([1, 5])
+col_reboot, _ = st.columns()
 with col_reboot:
-    # 加上全域唯一的 key，確保重啟按鈕正常作用
     if st.button(" Reboot App / 重新同步雲端", key="btn_global_reboot"):
         st.cache_data.clear()
         st.cache_resource.clear()
@@ -85,7 +83,7 @@ with col_reboot:
         st.rerun()
 
 # ========================================================    
-# 5. 初始化 Session State (讀取機制，只有啟動或重整時載入一次)
+# 5. 初始化 Session State (唯讀一次)
 # ========================================================
 if "db" not in st.session_state:
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
@@ -125,9 +123,9 @@ if "db" not in st.session_state:
                         "name_ja": row.get("name_ja", "-"),
                         "expected_count": int(row.get("expected_count", 0) or 0),
                         "actual_count": int(row.get("actual_count", 0) or 0),
-                        "expected_cases": int(row.get("expected_cases", 0) or 0), # 擴充欄位
-                        "pcs_per_case": int(row.get("pcs_per_case", 0) or 0),     # 擴充欄位
-                        "actual_cases": int(row.get("actual_cases", 0) or 0),     # 擴充欄位
+                        "expected_cases": int(row.get("expected_cases", 0) or 0), 
+                        "pcs_per_case": int(row.get("pcs_per_case", 0) or 0),     
+                        "actual_cases": int(row.get("actual_cases", 0) or 0),     
                         "status": row.get("status", "未點收")
                     }
             
@@ -139,66 +137,56 @@ if "db" not in st.session_state:
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 # ========================================================
-# 6. 主分頁結構 (st.tabs) - 嚴格限縮元件範圍
+# 6. 正確的 4 分頁主結構 (st.tabs) - 恢復您所有的 Tab
 # ========================================================
-tab1, tab2 = st.tabs([" Tab 1: 到貨導入", " Tab 2: PDA驗收"])
+tab1, tab2, tab3, tab4 = st.tabs([
+    " Tab 1: 到貨導入", 
+    " Tab 2: PDA驗收", 
+    " Tab 3: 盤點明細（棚卸データ）", 
+    " Tab 4: 歷史單據總覽"
+])
 
 with tab1:
     st.subheader("到貨導入模組")
-    # 💡 上傳 CSV 等按鈕，一定要綁定 key="t1_..."
     uploaded_file = st.file_uploader("上傳到貨預定 CSV 檔", type=["csv"], key="t1_csv_uploader")
     if uploaded_file is not None:
         st.write("已成功讀取到貨檔案！")
-        # 這裡放您原本的 CSV 解析與預設實到箱數邏輯...
+        # 這裡放您的 CSV 解析與預設箱數邏輯...
 
 with tab2:
     st.subheader("PDA 驗收模組")
-    st.write("請輸入單號或掃描條碼進行點收：")
-    
-    # 範例：PDA 條碼輸入框（確保 key 唯一）
     pda_barcode = st.text_input("🔍 掃描 JAN/ITF 條碼", key="t2_pda_barcode_input")
     converted_barcode = itf_to_jan13(pda_barcode)
     
     if converted_barcode:
         st.info(f"當前條碼: {converted_barcode}")
         
-    # 💡 您的動態五分欄（箱數、箱入數、實到箱數、驗收數量、Lot批次、有效期限）程式碼放這裡
-    # ⚠️ 務必注意：在 for 迴圈渲染多個品項時，每個輸入框都要加上 key，例如：
-    # for idx, item_code in enumerate(items_list):
-    #     cols = st.columns(5)
-    #     cols.number_input("箱數", step=1, key=f"t2_cases_{item_code}_{idx}")
-    #     cols.number_input("箱入數", step=1, key=f"t2_pcs_{item_code}_{idx}")
-    
-    # 點收存檔按鈕範例：
-    if st.button(" 確認點收並上傳雲端", key="t2_btn_save_manifest"):
-        # 這裡將記憶體中的狀態轉成 DataFrame，然後調用 save_data
-        # manifest_sheet = get_google_sheet("Manifest")
-        # save_data(updated_df, manifest_sheet)
-        st.success("點收資料已成功上傳（不重複讀取，絕不卡死）！")
+    # 💡 您的動態五分欄（箱數、箱入數、實到箱數等）程式碼放這裡
+    # ⚠️ 這裡面的所有輸入框，請務必像下面這樣綁定獨立 key，才不會穿透到別頁：
+    # st.number_input("箱數", key=f"t2_cases_{idx}")
 
-# ========================================================
-# 7. 🛑 核心修復點：使用實體分割線與獨立容器，徹底根治「分頁大穿透」
-# ========================================================
-st.markdown("---")  # 在視覺與 DOM 結構上強制畫出分水嶺
+with tab3:
+    st.subheader("1. 盤點明細（棚卸データ）")
+    # 🛑 關鍵修復：把原本亂跑的盤點明細鎖在 tab3 內部容器
+    with st.container():
+        st.write("這裡是盤點明細專區")
+        # 查詢功能 (加入獨一無二的 key)
+        t3_search = st.text_input("🔍 搜尋盤點明細", key="t3_inventory_search")
+        # 顯示表格 (加入獨一無二的 key)
+        # st.dataframe(your_inventory_df, key="t3_df_inventory_table")
+        st.caption("盤點明細數據（請在此處對接您的資料來源）")
 
-with st.container():
-    st.subheader(" 歷史數據與查詢總覽")
-    
-    # 使用 st.expander 將歷史單據收納，這是防禦 UI 穿透錯位的最強力防線
-    with st.expander("展開 / 折疊 查看歷史單據與盤點明細", expanded=True):
-        
-        # 查詢欄位（加上 bottom_ 前綴，保證全域唯一）
-        search_query = st.text_input(" 輸入單號、品項編碼或關鍵字查詢", key="bottom_search_input")
-        
-        # 顯示歷史單據總覽
-        st.markdown("####  歷史單據總覽")
-        # 範例：st.dataframe(your_history_dataframe, key="bottom_df_history_table")
-        st.caption("暫無歷史資料（請綁定您的資料來源）")
-        
-        # 顯示 1. 盤點明細（棚卸データ）
-        st.markdown("####  1. 盤點明細（棚卸データ）")
-        # 範例：st.dataframe(your_inventory_dataframe, key="bottom_df_inventory_table")
-        st.caption("暫無盤點明細（請綁定您的資料來源）")
+with tab4:
+    st.subheader("歷史單據總覽")
+    # 🛑 關鍵修復：把原本亂跑的歷史單據鎖在 tab4 內部容器
+    with st.container():
+        st.write("這裡是歷史單據專區")
+        # 查詢功能 (加入獨一無二的 key)
+        t4_search = st.text_input("🔍 搜尋歷史單據", key="t4_history_search")
+        # 顯示表格 (加入獨一無二的 key)
+        # st.dataframe(your_history_df, key="t4_df_history_table")
+        st.caption("歷史單據數據（請在此處對接您的資料來源）")
+
 
 
 # 5. UI 設定
