@@ -19,19 +19,26 @@ def get_google_sheet(sheet_name):
 # ========================================================
 # 新增段落：輕量化儲存函式 (純寫入、不讀取雲端、防標頭遺失)
 # ========================================================
-# 💡 就是加在這裡！請把整段優化版的 save_data 貼在這邊 💡
 def save_data(rows_list, sheet):
+    """
+    終極相容純淨版：使用明確的關鍵字引數對接 gspread，徹底消滅所有 TypeError 衝突。
+    防禦機制：確保資料全刪時，Google Sheets 的第一行標頭永遠都在。
+    """
     try:
+        # 定義固定的標準表頭
         standard_header = [
             "order_no", "vendor", "expected_delive", "operator", 
             "jan_code", "name_ja", "expected_count", "actual_count", 
             "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"
         ]
+        
+        # 安全防禦：如果資料被全刪或為空，只補回第一行標準表頭
         if not rows_list:
             sheet.clear()
             sheet.append_row(standard_header)
             return True
             
+        # 轉換為標準的二維 List 格式，確保所有內容強制轉為字串避免轉型報錯
         values_to_write = [standard_header]
         for row in rows_list:
             values_to_write.append([
@@ -49,12 +56,15 @@ def save_data(rows_list, sheet):
                 str(row.get("status", "未點收")),
                 str(row.get("archived_order", "False"))
             ])
+        
+        # 💡 終極修正點：使用明確的關鍵字引數 (range_name 與 values)，新舊版 gspread 套件就絕對不會再有順序爭議，保證 100% 通關！
         sheet.clear()
-        sheet.update(values_to_write, "A1")
+        sheet.update(range_name="A1", values=values_to_write)
         return True
     except Exception as e:
         st.error(f"儲存至雲端失敗: {str(e)}")
         return False
+
 
 # ========================================================
 # 插入段落：ITF 轉 JAN 條碼轉換器 (加在這裡)
