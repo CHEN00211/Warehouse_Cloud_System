@@ -21,24 +21,26 @@ def get_google_sheet(sheet_name):
 # ========================================================
 def save_data(rows_list, sheet):
     """
-    終極相容純淨版：使用明確的關鍵字引數對接 gspread，徹底消滅所有 TypeError 衝突。
+    不調用任何 update() 函式，改用 append_rows 與 clear 完美相容新舊所有版本 gspread。
     防禦機制：確保資料全刪時，Google Sheets 的第一行標頭永遠都在。
     """
     try:
         # 定義固定的標準表頭
         standard_header = [
             "order_no", "vendor", "expected_delive", "operator", 
-            "jan_code", "name_ja", "expected_count", "actual_count", 
-            "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"
+            "jan_code", "name_ja", "lot_no", "expiry", "expected_count", 
+            "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"
         ]
         
-        # 安全防禦：如果資料被全刪或為空，只補回第一行標準表頭
+        # 1. 先清空整張工作表的所有內容與格式
+        sheet.clear()
+        
+        # 2. 如果資料被全刪或本身為空，只補回第一行標準表頭
         if not rows_list:
-            sheet.clear()
             sheet.append_row(standard_header)
             return True
             
-        # 轉換為標準的二維 List 格式，確保所有內容強制轉為字串避免轉型報錯
+        # 3. 轉換為標準的二維 List 格式，確保所有內容強制轉為字串避免轉型報錯
         values_to_write = [standard_header]
         for row in rows_list:
             values_to_write.append([
@@ -48,6 +50,8 @@ def save_data(rows_list, sheet):
                 str(row.get("operator", "-")),
                 str(row.get("jan_code", "-")),
                 str(row.get("name_ja", "-")),
+                str(row.get("lot_no", "")),       # 補齊映射欄位
+                str(row.get("expiry", "")),       # 補齊映射欄位
                 str(row.get("expected_count", 0)),
                 str(row.get("actual_count", 0)),
                 str(row.get("expected_cases", 0)),
@@ -57,13 +61,14 @@ def save_data(rows_list, sheet):
                 str(row.get("archived_order", "False"))
             ])
         
-        # 💡 終極修正點：使用明確的關鍵字引數 (range_name 與 values)，新舊版 gspread 套件就絕對不會再有順序爭議，保證 100% 通關！
-        sheet.clear()
-        sheet.update(range_name="A1", values=values_to_write)
+        # 💡 終極修正點：改用穩定度最高的 append_rows 進行一次性批次高速寫入
+        # 新版舊版 gspread 都百分之百支援這個函式，絕不會再觸發 TypeError
+        sheet.append_rows(values_to_write)
         return True
     except Exception as e:
         st.error(f"儲存至雲端失敗: {str(e)}")
         return False
+
 
 
 # ========================================================
