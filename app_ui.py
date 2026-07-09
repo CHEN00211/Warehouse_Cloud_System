@@ -127,7 +127,7 @@ if "db" not in st.session_state:
             manifest_sheet = get_google_sheet("Manifest")  
             raw_records = manifest_sheet.get_all_records()
             
-            # 💡 世紀終結修正：完全不用 for 迴圈嵌套，直接用單行表達式建立基礎結構，彻底封死任何縮排靈異現象！
+            # 💡 使用單行表達式建立基礎結構，徹底封死任何縮排問題
             all_orders = list(set(str(r.get("order_no", "")).strip() for r in raw_records if str(r.get("order_no", "")).strip()))
             temp_manifest = {
                 o: {
@@ -141,7 +141,7 @@ if "db" not in st.session_state:
                 } for o in all_orders
             }
             
-            # 💡 第二步：扁平化填入項目，一樣保持單行結構，不留任何讓編輯器混淆 Tab 的空間
+            # 💡 第二步：扁平化填入項目，保持單行結構
             for r in raw_records:
                 o = str(r.get("order_no", "")).strip()
                 j = str(r.get("jan_code", "")).strip()
@@ -156,21 +156,6 @@ if "db" not in st.session_state:
             st.error(f"雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
-
-
-                
-                # 如果這個單號還沒建立，先初始化它的結構
-                if o_no not in temp_manifest:
-                    temp_manifest[o_no] = {
-                        "info": {
-                            "vendor": str(row.get("vendor", "-")),
-                            "expected_delivery": str(row.get("expected_delive", "-")), 
-                            "operator": str(row.get("operator", "-"))
-                        },
-                        "items": {},
-                        "archived_order": row.get("archived_order") in [True, "TRUE", "True"]
-                    }
-                
                 # 💡 核心修正：將讀取到的 jan_code 轉為字串
                 jan_raw = str(row.get("jan_code", "")).strip()
                 
