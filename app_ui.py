@@ -659,10 +659,15 @@ if "pda_key" not in st.session_state:
 # PART 2: Tab1 CSV 上傳與核心資料處理
 # ==========================================
 with tab1:
-    st.session_state.current_active_tab = "到貨導入"
+    st.session_state.current_active_tab = "上傳明細"
     if "last_success_msg" in st.session_state and st.session_state["last_success_msg"]:
         st.success(st.session_state["last_success_msg"])
-        st.session_state["last_success_msg"] = "1. 上傳到貨明細" 
+        st.session_state["last_success_msg"] = "" 
+
+    # 💡 核心修復：精準判斷全域語系，完美帶出「1. 上傳到貨明細」的中日文雙語標題
+    is_t1_top_zh = getattr(st.session_state, "lang", "zh") == "zh"
+    t1_top_title = "1. 上傳到貨明細" if is_t1_top_zh else "1. 入庫予定データの取り込み"
+    st.subheader(t1_top_title)
 
     col_imp1, col_imp2, col_imp3 = st.columns(3)
     with col_imp1:
@@ -816,7 +821,7 @@ with tab1:
     def _t1_local_lang(zh, ja):
         return zh if is_t1_zh else ja
 
-    st.subheader(_t1_local_lang("1. 上傳盤點明細", "1. 棚卸データのインポート"))
+    st.subheader(_t1_local_lang("2. 上傳盤點明細", "2. 棚卸データのインポート"))
     
     col_inv_up1, col_inv_up2 = st.columns(2)
     with col_inv_up1:
@@ -830,7 +835,7 @@ with tab1:
         key=f"uploaded_inv_file_uploader_t1_move_{st.session_state.t4_form_key}"
     )
     
-    if st.button(_t1_local_lang("確認導入盤點明細", "棚卸登録"), type="primary", key="submit_new_inv_sheet_btn_t1_move"):
+    if st.button(_t1_local_lang("確認", "確認"), type="primary", key="submit_new_inv_sheet_btn_t1_move"):
         if not inv_sheet_id or not inv_operator or uploaded_inv_file is None:
             st.error(_t1_local_lang("錯誤：請填寫盤點單號、人員並上傳 CSV 檔案", "エラー：棚卸番号、担当者、CSVファイルを入力・添付してください"))
         else:
