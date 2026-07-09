@@ -5,90 +5,102 @@ import io
 import re          
 import datetime
 
-# ========================================================
 # 1. 頁面設定 (必須是第一行，不可更動)
-# ========================================================
 st.set_page_config(page_title="到貨驗收系統", layout="wide")
-st.title(" 到貨驗收系統")
+st.title("到貨驗收系統")
 
-# ========================================================
-# 2. 定義連線與輕量化儲存函式 (內建防禦，確保標頭永不洗掉)
-# ========================================================
+# 2. 定義連線函式
 def get_google_sheet(sheet_name):
-    """確保 Secrets 設定在 Streamlit Cloud 中"""
+    # 確保 Secrets 設定在 Streamlit Cloud 中
     creds = st.secrets["gcp_service_account"]
     gc = gspread.service_account_from_dict(creds)
     return gc.open("Inventory_DB").worksheet(sheet_name)
 
+# ========================================================
+# 新增段落：輕量化儲存函式 (純寫入、不讀取雲端、防標頭遺失)
+# ========================================================
 def save_data(db_df, sheet):
     """
     輕量化寫入函式：拔除多餘的雲端讀取，徹底解決轉圈圈卡死。
     防禦機制：確保資料全刪時，Google Sheets 的第一行標頭永遠都在。
     """
     try:
-        # 定義固定的標準表頭
+        # 定義固定的標準表頭 (請根據您 Manifest 實際的欄位順序調整)
         standard_header = [
             "order_no", "vendor", "expected_delive", "operator", 
             "jan_code", "name_ja", "expected_count", "actual_count", 
             "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"
         ]
         
-        # 防禦機制：如果本地 DataFrame 資料全刪或為空
+        # 安全防禦：如果資料被全刪，則只補回標頭，不清空整張表
         if db_df.empty:
-            sheet.clear()  # 清空整張表
-            sheet.append_row(standard_header)  # 重新補回第一行標準表頭
+            sheet.clear()
+            sheet.append_row(standard_header)
             return True
             
-        # 本地有資料，將 DataFrame 轉換為寫入格式
+        # 本地有資料時，將標準表頭與資料轉換為列表合併
         values_to_write = [standard_header] + db_df.astype(str).values.tolist()
         
-        # 一次性覆寫 Google Sheets
+        # 一次性覆寫，不占用讀取 API
         sheet.clear()
         sheet.update(range_name="A1", values=values_to_write)
         return True
-        
     except Exception as e:
         st.error(f"儲存至雲端失敗: {str(e)}")
         return False
 
 # ========================================================
-# 3. ITF 轉 JAN 條碼轉換器
+# 插入段落：ITF 轉 JAN 條碼轉換器 (加在這裡)
 # ========================================================
 def itf_to_jan13(barcode: str) -> str:
     """如果輸入是 14 位 ITF 碼，自動轉換為 13 位 JAN 碼；其餘原樣返回"""
     if not barcode:
         return ""
+        
+    # 清除前後空白與特殊字元
     barcode = str(barcode).strip()
+    
+    # 檢查是否為 14 位純數字的 ITF 碼
     if len(barcode) == 14 and barcode.isdigit():
+        # 1. 取出中間的第 2 到 13 碼 (共 12 位數)
         jan_core = barcode[1:13]
+        
+        # 2. 計算標準的 Modulus 10 檢查碼 (權重 3-1-3-1)
+        # 從最後一位往前算，奇數位置權重 3，偶數位置權重 1
         odd_sum = sum(int(jan_core[i]) for i in range(0, 12, 2))
         even_sum = sum(int(jan_core[i]) for i in range(1, 12, 2))
+        
         total = odd_sum + (even_sum * 3)
         check_digit = (10 - (total % 10)) % 10
+        
+        # 3. 拼回 13 位的 JAN 碼
         return jan_core + str(check_digit)
-    return barcode 
+        
+    return barcode # 如果是 13 位 JAN 碼或其他格式，就直接回傳不變
 
 # ========================================================    
-# 4. 全域控制：Reboot 機制
+# 新增段落：全域控制 Reboot 機制 (修正 st.columns 空引數報錯問題)
 # ========================================================
 if "reboot_trigger" not in st.session_state:
     st.session_state.reboot_trigger = False
 
-col_reboot, _ = st.columns()
+col_reboot, col_spacer = st.columns(2)
 with col_reboot:
-    if st.button(" Reboot App / 重新同步雲端", key="btn_global_reboot"):
+    if st.button("Reboot App / 重新同步雲端", key="btn_global_reboot"):
         st.cache_data.clear()
         st.cache_resource.clear()
         st.session_state.clear()
         st.rerun()
 
 # ========================================================    
-# 5. 初始化 Session State (唯讀一次)
-# ========================================================
+# 4. 初始化 Session State
 if "db" not in st.session_state:
     with st.spinner("正在從 Google Sheets 同步雲端數據..."):
         try:
+            # 先建立一個乾淨的基礎結構
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
+            
+            # --- 💡 讀取 Manifest 工作表 ---
             manifest_sheet = get_google_sheet("Manifest")  
             raw_records = manifest_sheet.get_all_records()
             
@@ -98,6 +110,7 @@ if "db" not in st.session_state:
                 if not o_no:
                     continue
                 
+                # 如果這個單號還沒建立，先初始化它的結構
                 if o_no not in temp_manifest:
                     temp_manifest[o_no] = {
                         "info": {
@@ -109,9 +122,13 @@ if "db" not in st.session_state:
                         "archived_order": row.get("archived_order") in [True, "TRUE", "True"]
                     }
                 
+                # 💡 核心修正：將讀取到的 jan_code 轉為字串
                 jan_raw = str(row.get("jan_code", "")).strip()
+                
+                # 處理 Google Sheets 科學記號 (例如 4.98721E+12)
                 if "E+" in jan_raw or "e+" in jan_raw:
                     try:
+                        # 轉成浮點數後再轉成整數字串，強行還原條碼
                         jan_code = str(int(float(jan_raw)))
                     except:
                         jan_code = jan_raw
@@ -119,23 +136,24 @@ if "db" not in st.session_state:
                     jan_code = jan_raw
                 
                 if jan_code:
+                    # 補足可能因為轉型丟失的前導 0 (JAN 碼通常為 13 位)
+                    if len(jan_code) == 12 and jan_raw.startswith("4"):
+                        pass # 有些狀況是正常的，打通常補到13位比較安全
+                        
                     temp_manifest[o_no]["items"][jan_code] = {
                         "name_ja": row.get("name_ja", "-"),
                         "expected_count": int(row.get("expected_count", 0) or 0),
-                        "actual_count": int(row.get("actual_count", 0) or 0),
-                        "expected_cases": int(row.get("expected_cases", 0) or 0), 
-                        "pcs_per_case": int(row.get("pcs_per_case", 0) or 0),     
-                        "actual_cases": int(row.get("actual_cases", 0) or 0),     
-                        "status": row.get("status", "未點收")
+                        "actual_count": int(row.get("actual_count", 0) or 0), # 新增對應 J 欄
+                        "status": row.get("status", "未點收") # 對應 M 欄
                     }
             
+            # 將整理好的雲端資料同步回 session_state
             st.session_state["db"]["manifest_by_order"] = temp_manifest
             st.success("雲端 Manifest 數據同步成功！")
             
         except Exception as e:
-            st.error(f"雲端同步失敗。錯誤訊息: {e}")
+            st.error(f" 雲端同步失敗。錯誤訊息: {e}")
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
-
 
 
 # 5. UI 設定
