@@ -1219,17 +1219,29 @@ if is_tab2_active:
                     for idx in range(st.session_state[f"row_count_{selected_order}"]):
                         st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                         
-                        # 初始狀態填入預設值
+                        # 建立該欄位專屬的唯一 Key 名稱（確保每筆資料獨立）
+                        per_case_state_key = f"init_per_case_{selected_order}_{idx}"
+                        cases_state_key = f"init_cases_{selected_order}_{idx}"
+
+                        # 🛠️ 檢查保險箱：如果這個欄位第一次出現，才把 CSV 的值寫進去保存
+                        if per_case_state_key not in st.session_state:
+                            if idx == 0:
+                                st.session_state[per_case_state_key] = int(db_pcs_per_case)
+                                st.session_state[cases_state_key] = int(db_expected_cases)
+                            else:
+                                st.session_state[per_case_state_key] = int(db_pcs_per_case) # 新增組也強制鎖定 CSV 的箱入數
+                                st.session_state[cases_state_key] = 0
+
+                        # 將保險箱裡絕對不會被覆蓋的值，賦予給您的 UI 變數
+                        init_per_case = st.session_state[per_case_state_key]
+                        init_cases = st.session_state[cases_state_key]
+
+                        # 處理實際點貨數量
                         if idx == 0:
-                            # 第一組自動帶入 Data 數值
-                            init_cases = int(db_expected_cases)   # 這會讀到 CSV 的 3
-                            init_per_case = int(db_pcs_per_case) # 這會讀到 CSV 的 18
-                            init_actual = int(st.session_state.pda_temp_actual_count) 
+                            init_actual = int(st.session_state.pda_temp_actual_count)
                         else:
-                            # 🛠️ 新增組：箱入數一樣要固定抓 CSV 的規格！不能給 0
-                            init_cases = 0   # 新增組的箱數預設為 0 讓人員往上加
-                            init_per_case = int(db_pcs_per_case) # 👈 強制鎖定！不論新增幾組，箱入數都抓 CSV 的 18
                             init_actual = 0
+
 
 
                         # 🛠️ 1. 調整寬度權重，並將第一欄對調為【箱入數】、第二欄對調為【箱數】
