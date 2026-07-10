@@ -1348,7 +1348,7 @@ if is_tab2_active:
                         if not is_all_rows_valid:
                             st.error(error_message_to_show)
                         else:
-                            target_jan = st.session_state.current_verified_jan
+                            target_jan = st.session_state.get("pda_current_verified_jan", "")
                             # 先把舊的副行清掉（若重複點收時避免無限疊加副行）
                             sub_keys_to_del = [k for k in current_manifest_pool.keys() if current_manifest_pool[k].get("is_sub_row") and current_manifest_pool[k].get("parent_jan") == target_jan]
                             for sk in sub_keys_to_del:
