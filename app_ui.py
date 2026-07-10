@@ -1232,7 +1232,7 @@ if is_tab2_active:
                         # =========================================================
                         # 📦 多組合欄位動態渲染區塊 (支援拆單點收、多效期與 Lot 批次)
                         # =========================================================
-                        # 🛠️ 數據完全回歸：強制對齊原始變數，徹底消滅任何會自行配算出 80 的錯誤除法！
+                        # 🛠️ 終極動態清空防禦線：將 target_jan 灌入 key 中，換上品項時欄位全自動秒歸零！
                         
                         # 根據是不是第一個組合，精準給予最原汁原味的數值
                         if idx == 0:
@@ -1248,23 +1248,23 @@ if is_tab2_active:
                         col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                         
                         with col_per:
-                            # 🛠️ 2. 固定箱入數：不管是組合 1 還是新增的組合 2，箱入數保證精準呈現您的 CSV 數值（如 160）
+                            # 🛠️ 2. 固定箱入數：綁定 target_jan，換商品時自動刷洗記憶
                             r_per_case = st.number_input(
                                 "箱入數" if st.session_state.lang == "zh" else "入数", 
                                 min_value=0, 
-                                value=current_render_per_case, # 👈 完美同步原始 CSV 數值
+                                value=current_render_per_case, 
                                 step=1,
-                                key=f"per_r_{selected_order}_{idx}",
-                                disabled=True # 👈 鎖定反灰
+                                key=f"per_r_{selected_order}_{target_jan}_{idx}", # 👈 灌入 target_jan
+                                disabled=True 
                             )
                         with col_box:
-                            # 🛠️ 3. 箱數：維持可動狀態，組合 1 自動帶出 CSV 箱數（如 2），組合 2 預設為 0
+                            # 🛠️ 3. 箱數：換商品時全自動重置回 CSV 預設箱數（組合 1）或 0（組合 2）
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
-                                value=current_render_cases, # 👈 完美同步原始 CSV 數值
+                                value=current_render_cases, 
                                 step=1, 
-                                key=f"box_r_{selected_order}_{idx}"
+                                key=f"box_r_{selected_order}_{target_jan}_{idx}" # 👈 灌入 target_jan
                             )
                         with col_field1:
                             # 🛠️ 4. 智慧乘法連動：總驗收數量 = 現有的箱數(r_cases) × 鎖定的箱入數(r_per_case)
@@ -1273,15 +1273,26 @@ if is_tab2_active:
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
-                                value=calculated_total, # 👈 全自動智慧乘法更新（2 * 160 = 320）
+                                value=calculated_total, 
                                 step=1,
-                                key=f"act_r_{selected_order}_{idx}"
+                                key=f"act_r_{selected_order}_{target_jan}_{idx}" # 👈 灌入 target_jan
                             )
                         with col_field2:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
-                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}")
+                            # 🛠️ 5. 批次欄位：換商品時自動清空成乾淨的 "" 
+                            r_lot = st.text_input(
+                                lot_field_label, 
+                                value="", 
+                                key=f"lot_r_{selected_order}_{target_jan}_{idx}" # 👈 灌入 target_jan
+                            )
                         with col_field3:
-                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}")
+                            # 🛠️ 6. 效期欄位：換商品時自動清空成乾淨的預設 placeholder
+                            r_expiry = st.text_input(
+                                t["expiry"], 
+                                value="", 
+                                placeholder="2026/1/1", 
+                                key=f"exp_r_{selected_order}_{target_jan}_{idx}" # 👈 灌入 target_jan
+                            )
                         
                         # 蒐集包含新欄位的完整資料
                         collected_rows_data.append({
@@ -1292,6 +1303,7 @@ if is_tab2_active:
                             "pcs_per_case": r_per_case
                         })
                         st.markdown("---")
+
 
 
 
