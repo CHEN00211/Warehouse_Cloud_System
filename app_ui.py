@@ -1229,55 +1229,27 @@ if is_tab2_active:
                             init_per_case = 0
                             init_actual = 0
 
-                        # =========================================================
-                        # 📦 多組合欄位動態渲染區塊 (支援拆單點收、多效期與 Lot 批次)
-                        # =========================================================
-                        # 🛠️ 終極暴風斷開術：徹底不信任外層變數，當場直奔大資料庫挖出當前商品的原始 CSV 數據！
-                        
-                        # 1. 繞過一切可能被鎖死在 10 的外部暫存，直接用目前刷出的 target_jan 回溯原始資料庫
-                        try:
-                            # 精準定位大資料庫中，這張單據（selected_order）下這款商品（target_jan）的原始名冊
-                            db_item_data = db["manifest_by_order"][selected_order]["items"][target_jan]
-                            
-                            # 強制融化並讀取 CSV 原生數據，徹底洗乾淨記憶
-                            final_csv_pcs = int(float(db_item_data["pcs_per_case"]))
-                            final_csv_cases = int(float(db_item_data["expected_cases"]))
-                        except Exception as e:
-                            # 萬一發生極端例外找不到，則安全降級使用目前全域 locals 中剩餘的最高數值
-                            final_csv_pcs = int(float(init_per_case)) if ('init_per_case' in locals() and init_per_case) else 10
-                            final_csv_cases = int(float(init_cases)) if ('init_cases' in locals() and init_cases) else 0
-
-                        # 2. 根據是不是第一個組合，精準且強制的給予剛剛現撈出來的正確數據
-                        if idx == 0:
-                            # 組合 1 的箱入數與箱數，完全、無條件百分之百尊崇大資料庫現掏出來的原始 CSV 設定
-                            current_render_per_case = final_csv_pcs
-                            current_render_cases = final_csv_cases
-                        else:
-                            # 點擊增加的組合 2、組合 3，箱入數強制【同步複製】組合 1 的真實數值，箱數從 0 開始讓人員累加
-                            current_render_per_case = final_csv_pcs
-                            current_render_cases = 0
-
                         # 🛠️ 1. 調整寬度權重，並將第一欄對調為【箱入數】、第二欄對調為【箱數】
                         col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                         
                         with col_per:
-                            # 🛠️ 2. 固定箱入數：綁定變商品就自動歸零的專屬 key，並放入大資料庫現掏的正確值
+                            # 🛠️ 2. 固定箱入數：精準讀取您當初 CSV 上傳的固定值，並加上 disabled=True 鎖定反灰
                             r_per_case = st.number_input(
                                 "箱入數" if st.session_state.lang == "zh" else "入数", 
                                 min_value=0, 
-                                value=current_render_per_case, # 👈 完美同步大資料庫最乾淨數據（絕不吃舊快取）
+                                value=int(init_per_case), 
                                 step=1,
-                                key=f"per_r_{selected_order}_{target_jan}_{idx}", # 👈 包含 target_jan 的動態清空 key
-                                disabled=True # 👈 鎖定反灰
+                                key=f"per_r_{selected_order}_{idx}",
+                                disabled=True # 👈 鎖定，不讓點貨人員手動亂改
                             )
                         with col_box:
-                            # 🛠️ 3. 箱數：換品項時全自動清空重置，且組合 1 帶出正確箱數，組合 2 預設為 0
+                            # 🛠️ 3. 箱數：維持可動狀態，讓人員根據現場清點數量進行加減
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
-                                value=current_render_cases, # 👈 完美同步大資料庫最乾淨數據
+                                value=int(init_cases), 
                                 step=1, 
-                                key=f"box_r_{selected_order}_{target_jan}_{idx}" # 👈 包含 target_jan 的動態清空 key
+                                key=f"box_r_{selected_order}_{idx}"
                             )
                         with col_field1:
                             # 🛠️ 4. 智慧乘法連動：總驗收數量 = 現有的箱數(r_cases) × 鎖定的箱入數(r_per_case)
@@ -1286,26 +1258,15 @@ if is_tab2_active:
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
-                                value=calculated_total, 
+                                value=calculated_total, # 👈 全自動智慧連動計算
                                 step=1,
-                                key=f"act_r_{selected_order}_{target_jan}_{idx}" # 👈 包含 target_jan 的動態清空 key
+                                key=f"act_r_{selected_order}_{idx}"
                             )
                         with col_field2:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
-                            # 🛠️ 5. 批次欄位：換商品時全自動秒清空成乾淨的 "" 
-                            r_lot = st.text_input(
-                                lot_field_label, 
-                                value="", 
-                                key=f"lot_r_{selected_order}_{target_jan}_{idx}" # 👈 包含 target_jan 的動態清空 key
-                            )
+                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}")
                         with col_field3:
-                            # 🛠️ 6. 效期欄位：換商品時全自動秒清空成乾淨的預設 placeholder
-                            r_expiry = st.text_input(
-                                t["expiry"], 
-                                value="", 
-                                placeholder="2026/1/1", 
-                                key=f"exp_r_{selected_order}_{target_jan}_{idx}" # 👈 包含 target_jan 的動態清空 key
-                            )
+                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}")
                         
                         # 蒐集包含新欄位的完整資料
                         collected_rows_data.append({
@@ -1316,11 +1277,6 @@ if is_tab2_active:
                             "pcs_per_case": r_per_case
                         })
                         st.markdown("---")
-
-
-
-
-
                     
                     # 🔒 完整回復您的表單雙按鈕排版
                     col_form_btn1, col_form_btn2 = st.columns(2)
@@ -1853,4 +1809,5 @@ if is_tab4_active:
                 )
     else:
         st.warning(_("目前系統中尚無任何盤點明細，請由上方區域導入您的第一張 CSV 盤點明細", "棚卸伝票がありません。上のフォームからインポートしてください。"))
+ 
  
