@@ -1208,7 +1208,7 @@ if is_tab2_active:
                     collected_rows_data = []
                     
                     # 💾 自資料庫取出目前 JAN 碼對應的原始預設數值
-                    target_jan = st.session_state.current_verified_jan
+                    target_jan = st.session_state.get("pda_current_verified_jan", "")
                     db_item = current_manifest_pool.get(target_jan, {})
                     
                     # 讀取箱數與箱入數預設值
