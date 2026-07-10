@@ -1011,17 +1011,22 @@ with tab1:
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
 # ==========================================
 with tab2:
-    st.session_state.current_active_tab = "PDA驗收"
-    if "current_verified_jan" not in st.session_state:
-        st.session_state.current_verified_jan = ""
-    if "temp_name_ja" not in st.session_state:
-        st.session_state.temp_name_ja = ""
-    if "temp_expected_count" not in st.session_state:
-        st.session_state.temp_expected_count = 0
-    if "temp_actual_count" not in st.session_state:
-        st.session_state.temp_actual_count = 0
-    if "show_dup_warning" not in st.session_state:
-        st.session_state.show_dup_warning = False
+    # 🛠️ 加上分頁二專屬的成功訊息檢查與顯示邏輯
+    if "pda_success_msg" in st.session_state and st.session_state["pda_success_msg"]:
+        st.success(st.session_state["pda_success_msg"])
+        st.session_state["pda_success_msg"] = "" # 顯示完立刻清空，避免重複刷新時一直出現
+            
+    # 🛠️ 加上 pda_ 前綴，確保這些變數只屬於分頁二，絕不與分頁一、三共享
+    if "pda_current_verified_jan" not in st.session_state:
+        st.session_state.pda_current_verified_jan = ""
+    if "pda_temp_name_ja" not in st.session_state:
+        st.session_state.pda_temp_name_ja = ""
+    if "pda_temp_expected_count" not in st.session_state:
+        st.session_state.pda_temp_expected_count = 0
+    if "pda_temp_actual_count" not in st.session_state:
+        st.session_state.pda_temp_actual_count = 0
+    if "pda_show_dup_warning" not in st.session_state:
+        st.session_state.pda_show_dup_warning = False
     if "pda_error_msg" not in st.session_state:
         st.session_state.pda_error_msg = ""
 
@@ -1092,9 +1097,9 @@ with tab2:
                     if target_jan in current_manifest_pool:
                         item = current_manifest_pool[target_jan]
                         st.session_state.current_verified_jan = target_jan
-                        st.session_state.temp_name_ja = item["name_ja"]
-                        st.session_state.temp_expected_count = item["expected_count"]
-                        st.session_state.temp_actual_count = item["expected_count"]  
+                        st.session_state.pda_temp_name_ja = item["name_ja"]
+                        st.session_state.pda_temp_expected_count = item["expected_count"]
+                        st.session_state.pda_temp_actual_count = item["expected_count"]  
                         st.session_state.show_dup_warning = (item.get("status") == "決收點貨" or item.get("status") == "已點收驗收")
                         st.session_state.pda_error_msg = ""
                     else:
@@ -1110,9 +1115,9 @@ with tab2:
             if st.session_state.current_verified_jan == "ERROR_NOT_FOUND":
                 st.error(st.session_state.pda_error_msg.replace("！", ""))
                 st.session_state.current_verified_jan = ""
-                st.session_state.temp_name_ja = ""
-                st.session_state.temp_expected_count = 0
-                st.session_state.temp_actual_count = 0
+                st.session_state.pda_temp_name_ja = ""
+                st.session_state.pda_temp_expected_count = 0
+                st.session_state.pda_temp_actual_count = 0
                 st.session_state.show_dup_warning = False
             # ==========================================
             # PART 4-2 (上): Tab2 確認提交表單與動態欄位生成
@@ -1124,8 +1129,8 @@ with tab2:
                     
                 info_df = pd.DataFrame([
                     {"Item_Key": "JAN Code", "Item_Val": st.session_state.current_verified_jan},
-                    {"Item_Key": "商品名", "Item_Val": st.session_state.temp_name_ja},
-                    {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.temp_expected_count)}
+                    {"Item_Key": "商品名", "Item_Val": st.session_state.pda_temp_name_ja},
+                    {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.pda_temp_expected_count)}
                 ])
                 
                 st.dataframe(
@@ -1161,7 +1166,7 @@ with tab2:
                         if idx == 0:
                             init_cases = int(db_expected_cases)
                             init_per_case = int(db_pcs_per_case)
-                            init_actual = int(st.session_state.temp_actual_count) 
+                            init_actual = int(st.session_state.pda_temp_actual_count) 
                         else:
                             init_cases = 0
                             init_per_case = 0
@@ -1488,7 +1493,8 @@ with tab2:
                 if st.button(archive_btn_label, type="primary", use_container_width=True, key=f"archive_order_btn_{selected_order}"):
                     db["manifest_by_order"][selected_order]["archived_order"] = True
                     save_data(db)
-                    st.success(f"單據 {selected_order} 已成功結案並移至歷史存檔區域！")
+                    # 🛠️ 修正：不要直接 st.success，而是存進分頁二專屬的隔離暫存變數中
+                    st.session_state["pda_success_msg"] = f"單據 {selected_order} 已成功結案並移至歷史存檔區域！"
                     st.rerun()
             else:
                 st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
@@ -1496,13 +1502,14 @@ with tab2:
 # PART 6: Tab4 實體盤點獨立雲端閘門
 # ==========================================
 with tab4:
-    st.session_state.current_active_tab = "實體盤點"
-    if st.session_state.current_active_tab != "實體盤點":
-        st.stop()
-    # --- 只在 Tab4 範圍內初始化 ---
+    # 🛠️ 1. 徹底移除強制覆蓋與 st.stop()，改用 tab4 專屬的初始化
     if "t4_form_key" not in st.session_state:
         st.session_state.t4_form_key = 0
-    # ---------------------------
+        
+    # 🛠️ 2. 隔離 tab4 專屬的成功/錯誤訊息暫存，絕對不與 tab1, tab2 混用
+    if "t4_success_msg" in st.session_state and st.session_state["t4_success_msg"]:
+        st.success(st.session_state["t4_success_msg"])
+        st.session_state["t4_success_msg"] = ""
 
     # 確保語系邏輯與您的全域設定同步
     is_zh = getattr(st.session_state, "lang", "zh") == "zh"
@@ -1511,27 +1518,36 @@ with tab4:
     def _(zh, ja):
         return zh if is_zh else ja
 
-    # 1. 物理隔離：建立專屬於 Tab 4 的本地變數與檔案，與全域獨立
-    try:
-        # 使用您原有的連線函式
-        sheet_t4 = get_google_sheet("tab4")
-        raw_data_t4 = sheet_t4.get_all_records()
-        
-        # 整理成原本程式預期的 t4_data 結構
-        t4_data = {"inventory_sheets": {}}
-        for row in raw_data_t4:
-            # 💡 核心防禦：強制將從雲端讀出來的 sheet_id 轉為標準字串！
-            s_id = str(row.get("sheet_id", "default")).strip() 
+    # 🛠️ 3. 物理隔離：將讀取出來的雲端資料存入 tab4 專屬的全域空間，避免每次重新整理都去抓 Sheet
+    if "t4_cached_data" not in st.session_state:
+        try:
+            # 只有在第一次載入或需要刷新時才對 Google Sheet 連線
+            sheet_t4 = get_google_sheet("tab4")
+            raw_data_t4 = sheet_t4.get_all_records()
             
-            if s_id not in t4_data["inventory_sheets"]:
-                t4_data["inventory_sheets"][s_id] = {
-                    "info": {
-                        "operator": str(row.get("operator", "")),
-                        "upload_date": str(row.get("upload_date", ""))
-                    },
-                    "items": []
-                }
-            
+            # 整理成原本程式預期的 t4_data 結構
+            t4_data = {"inventory_sheets": {}}
+            for row in raw_data_t4:
+                # 💡 核心防禦：強制將從雲端讀出來的 sheet_id 轉為標準字串！
+                s_id = str(row.get("sheet_id", "default")).strip() 
+                
+                if s_id not in t4_data["inventory_sheets"]:
+                    t4_data["inventory_sheets"][s_id] = {
+                        "info": {
+                            "operator": str(row.get("operator", "")),
+                            "upload_date": str(row.get("upload_date", ""))
+                        },
+                        "items": []
+                    }
+            # 將整理好的資料鎖進 tab4 的獨立口袋
+            st.session_state.t4_cached_data = t4_data
+        except Exception as e:
+            st.error(f"Google Sheet 連線失敗: {e}")
+            st.session_state.t4_cached_data = {"inventory_sheets": {}}
+
+    # 讓下方的舊程式碼直接使用隔離後的資料，完全相容您原本的邏輯
+    t4_data = st.session_state.t4_cached_data
+    
             # --- 關鍵修正：嚴格處理 is_counted ---
             val = row.get("is_counted", False)
             
