@@ -653,6 +653,32 @@ if "t1_form_key" not in st.session_state:
     st.session_state.t1_form_key = 0
 if "pda_key" not in st.session_state:
     st.session_state.pda_key = 0
+# =========================================================
+# 🛡️ 雲端點貨系統 - 全域分頁隔離安全防禦線（請放在 with tab 之前）
+# =========================================================
+if "t1_form_key" not in st.session_state:
+    st.session_state.t1_form_key = 0
+
+# 分頁二 (PDA驗收) 專屬獨立記憶體，絕不與其他分頁共用
+if "pda_key" not in st.session_state:
+    st.session_state.pda_key = 0
+if "pda_current_verified_jan" not in st.session_state:
+    st.session_state.pda_current_verified_jan = ""
+if "pda_temp_name_ja" not in st.session_state:
+    st.session_state.pda_temp_name_ja = ""
+if "pda_temp_expected_count" not in st.session_state:
+    st.session_state.pda_temp_expected_count = 0
+if "pda_temp_actual_count" not in st.session_state:
+    st.session_state.pda_temp_actual_count = 0
+if "pda_show_dup_warning" not in st.session_state:
+    st.session_state.pda_show_dup_warning = False
+if "pda_error_msg" not in st.session_state:
+    st.session_state.pda_error_msg = ""
+
+# 分頁四 (實體盤點) 專屬獨立記憶體
+if "t4_form_key" not in st.session_state:
+    st.session_state.t4_form_key = 0
+# =========================================================
 
 
 # ==========================================
@@ -1112,7 +1138,7 @@ with tab2:
 
             st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
 
-            if st.session_state.current_verified_jan == "ERROR_NOT_FOUND":
+            if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
                 st.error(st.session_state.pda_error_msg.replace("！", ""))
                 st.session_state.current_verified_jan = ""
                 st.session_state.pda_temp_name_ja = ""
