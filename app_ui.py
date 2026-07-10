@@ -178,9 +178,16 @@ if "db" not in st.session_state:
             st.session_state["db"] = {"inventory": [], "manifest_by_order": {}, "daily_counters": {}}
 
 
-# 5. UI 設定
+# =========================================================
+# 🛠️ 5. UI 設定 - 終極防穿透隔離架構
+# =========================================================
+import streamlit as st
+
+# 1. 建立一個真正的全域分頁追蹤器，用來阻斷後台的靈異渲染
 if "current_active_tab" not in st.session_state:
-    st.session_state.current_active_tab = "到貨導入"
+    st.session_state.current_active_tab = "上傳明細"
+
+# 2. 宣告分頁（維持您的命名結構）
 tab1, tab2, tab4 = st.tabs(["上傳明細", "PDA驗收", "實體盤點"])
 
 
@@ -685,10 +692,11 @@ if "t4_form_key" not in st.session_state:
 # PART 2: Tab1 CSV 上傳與核心資料處理
 # ==========================================
 with tab1:
-    st.session_state.current_active_tab = "上傳明細"
-    if "last_success_msg" in st.session_state and st.session_state["last_success_msg"]:
-        st.success(st.session_state["last_success_msg"])
-        st.session_state["last_success_msg"] = "" 
+    this_tab_name = "上傳明細"
+    # 🛠️ 將成功訊息改成分頁一專屬的獨立變數名稱（例如：t1_success_msg）
+    if "t1_success_msg" in st.session_state and st.session_state["t1_success_msg"]:
+        st.success(st.session_state["t1_success_msg"])
+        st.session_state["t1_success_msg"] = "" # 顯示完立刻清空
 
     # 💡 核心修復：精準判斷全域語系，完美帶出「1. 上傳到貨明細」的中日文雙語標題
     is_t1_top_zh = getattr(st.session_state, "lang", "zh") == "zh"
@@ -772,8 +780,10 @@ with tab1:
                                 "actual_cases": csv_cases  
                             }
                         
+                        # 🛠️ 安全的新寫法（絕對不穿透）：
                         prefix = t.get("success_msg_prefix", "上傳成功")
-                        st.session_state["last_success_msg"] = f"{prefix}: {auto_order_no}"
+                        st.session_state["t1_success_msg"] = f"{prefix}: {auto_order_no}" # 改存在 t1_success_msg
+
                         
                         st.session_state.f_op_name = ""
                         st.session_state.f_vendor_name = ""
@@ -1037,10 +1047,10 @@ with tab1:
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
 # ==========================================
 with tab2:
-    # 🛠️ 加上分頁二專屬的成功訊息檢查與顯示邏輯
+    # 🛠️ 檢查分頁二專屬的成功訊息，絕對不與 tab1, tab4 混用
     if "pda_success_msg" in st.session_state and st.session_state["pda_success_msg"]:
         st.success(st.session_state["pda_success_msg"])
-        st.session_state["pda_success_msg"] = "" # 顯示完立刻清空，避免重複刷新時一直出現
+        st.session_state["pda_success_msg"] = "" # 顯示完立刻清空
             
     # 🛠️ 加上 pda_ 前綴，確保這些變數只屬於分頁二，絕不與分頁一、三共享
     if "pda_current_verified_jan" not in st.session_state:
@@ -1703,9 +1713,12 @@ with tab4:
                             t4_data["inventory_sheets"][selected_sheet]["items"][idx_key]["is_counted"] = True
                         _tab4_isolated_save(t4_data)
                         st.session_state[f"scan_counter_{selected_sheet}"] += 1
-                        st.success(_("條碼資料已確認更新！", "データが更新されました！"))
+                        
+                        # 🛠️ 終極修復：不要當下直接 success，而是鎖進分頁四專屬的獨立口袋
+                        success_txt = _("條碼資料已確認更新！", "データが更新されました！")
+                        st.session_state["t4_success_msg"] = success_txt
+                        
                         st.rerun()
-
 
             # 3. 盤點進度動態清單
             st.markdown("---")
