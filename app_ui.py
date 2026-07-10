@@ -1240,7 +1240,7 @@ if is_tab2_active:
                                 value=int(init_per_case), 
                                 step=1,
                                 key=f"per_r_{selected_order}_{idx}",
-                                disabled=True # 👈 鎖定，不讓點貨人員手動亂改
+                                disabled=True # 👈 鎖定反灰，不讓點貨人員手動亂改
                             )
                         with col_box:
                             # 🛠️ 3. 箱數：維持可動狀態，讓人員根據現場清點數量進行加減
@@ -1277,6 +1277,7 @@ if is_tab2_active:
                             "pcs_per_case": r_per_case
                         })
                         st.markdown("---")
+
                     
                     # 🔒 完整回復您的表單雙按鈕排版
                     col_form_btn1, col_form_btn2 = st.columns(2)
