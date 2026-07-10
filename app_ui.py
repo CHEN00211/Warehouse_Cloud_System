@@ -1539,29 +1539,29 @@ with tab4:
                         },
                         "items": []
                     }
-            # 將整理好的資料鎖進 tab4 的獨立口袋
+                
+                # 🛠️ 完美對齊：把 is_counted 與 append 邏輯全部收納進 for 迴圈內部
+                val = row.get("is_counted", False)
+                
+                # 將各種可能的型別轉為布林值 (處理字串、空值、數字)
+                if isinstance(val, str):
+                    row["is_counted"] = val.lower() in ['true', '1', 'yes']
+                else:
+                    row["is_counted"] = bool(val)
+                
+                # 把當前這一列資料正確塞進該張單據的 items 清單中
+                t4_data["inventory_sheets"][s_id]["items"].append(row)
+                
+            # 當所有資料都處理完畢後，才打包鎖進緩存口袋
             st.session_state.t4_cached_data = t4_data
+            
         except Exception as e:
-            st.error(f"Google Sheet 連線失敗: {e}")
+            st.error(f"雲端讀取失敗: {e}")
             st.session_state.t4_cached_data = {"inventory_sheets": {}}
 
     # 讓下方的舊程式碼直接使用隔離後的資料，完全相容您原本的邏輯
     t4_data = st.session_state.t4_cached_data
-    
-            # --- 關鍵修正：嚴格處理 is_counted ---
-            val = row.get("is_counted", False)
-            
-            # 將各種可能的型別轉為布林值 (處理字串、空值、數字)
-            if isinstance(val, str):
-                row["is_counted"] = val.lower() in ['true', '1', 'yes']
-            else:
-                row["is_counted"] = bool(val)
-            
-            t4_data["inventory_sheets"][s_id]["items"].append(row)
-            
-    except Exception as e:
-        st.error(f"雲端讀取失敗: {e}")
-        t4_data = {"inventory_sheets": {}}
+
 
     # 2. 專屬存檔安全函式
     def _tab4_isolated_save(data_to_save):
