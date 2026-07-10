@@ -179,16 +179,40 @@ if "db" not in st.session_state:
 
 
 # =========================================================
-# 🛠️ 5. UI 設定 - 終極防穿透隔離架構
+# 🛠️ 5. UI 設定 - 終極防穿透隔離架構 (虛擬隔離版)
 # =========================================================
-import streamlit as st
-
-# 1. 建立一個真正的全域分頁追蹤器，用來阻斷後台的靈異渲染
+# 1. 建立一個真正的全域分頁追蹤器
 if "current_active_tab" not in st.session_state:
     st.session_state.current_active_tab = "上傳明細"
 
-# 2. 宣告分頁（維持您的命名結構）
+# 2. 宣告分頁（維持您原本的 tabs 元件，外觀完全不變）
 tab1, tab2, tab4 = st.tabs(["上傳明細", "PDA驗收", "實體盤點"])
+
+# 3. 🚨 核心阻斷防禦線：利用內建元件偷偷捕捉使用者當前到底正在看哪一頁！
+# 透過隱藏的單選元件，實時把使用者的點擊狀態同步通知後台
+current_visible_tab = st.radio(
+    "TabTracker",
+    ["上傳明細", "PDA驗收", "實體盤點"],
+    horizontal=True,
+    label_visibility="collapsed",
+    key="real_active_tab_tracker"
+)
+
+# 4. 🧹 記憶體動態大掃除：當後台全跑時，如果發現某個變數不屬於當前看見的分頁，立刻在後台把它蒸發，徹底斷絕穿透！
+if current_visible_tab != "上傳明細":
+    # 如果使用者不在分頁一，立刻清空分頁一的成功訊息，阻止它穿透
+    st.session_state["t1_success_msg"] = ""
+    st.session_state["last_success_msg"] = ""
+
+if current_visible_tab != "PDA驗收":
+    # 如果使用者不在分頁二，立刻把分頁二的條碼錯誤跟結案訊息蒸發，鬼影直接消失
+    st.session_state["pda_current_verified_jan"] = ""
+    st.session_state["pda_success_msg"] = ""
+
+if current_visible_tab != "實體盤點":
+    # 如果使用者不在分頁四，清空盤點的成功提示
+    st.session_state["t4_success_msg"] = ""
+
 
 
 # ==========================================
