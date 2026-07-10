@@ -1185,7 +1185,7 @@ if is_tab2_active:
                     st.warning(t["dup_warning"].replace("？", "").replace("！", ""))
                     
                 info_df = pd.DataFrame([
-                    {"Item_Key": "JAN Code", "Item_Val": st.session_state.current_verified_jan},
+                    {"Item_Key": "JAN Code", "Item_Val": st.session_state.get("pda_current_verified_jan", "")}
                     {"Item_Key": "商品名", "Item_Val": st.session_state.pda_temp_name_ja},
                     {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.pda_temp_expected_count)}
                 ])
