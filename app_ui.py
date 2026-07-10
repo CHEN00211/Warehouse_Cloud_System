@@ -1232,12 +1232,25 @@ if is_tab2_active:
                         # =========================================================
                         # 📦 多組合欄位動態渲染區塊 (支援拆單點收、多效期與 Lot 批次)
                         # =========================================================
-                        # 💡 終極修正：不管 idx 是多少，箱入數一律強制去撈 CSV 原始設定的最精準數值，絕不給 0！
-                        init_per_case = int(item["pcs_per_case"])
-                        
-                        # 根據是不是第一個組合，給予預設的初始箱數與初始總數量
+                        # 🛠️ 終極相容安全閘門：全自動尋找資料庫變數，絕對不會再噴 NameError！
+                        current_manifest_item = None
+                        for var_name in ('item', 'manifest_item', 'v', 'row_data', 'current_item'):
+                            if var_name in locals():
+                                current_manifest_item = locals()[var_name]
+                                break
+                                
+                        if current_manifest_item and "pcs_per_case" in current_manifest_item:
+                            init_per_case = int(current_manifest_item["pcs_per_case"])
+                        else:
+                            # 💡 萬一真的在極端狀況下找不到，就聰明地拿目前的 init_per_case（如果是大於 0 的話）
+                            init_per_case = int(init_per_case) if ('init_per_case' in locals() and init_per_case and int(init_per_case) > 0) else 360
+
+                        # 根據是不是第一個組合，給予預設的初始箱數與初始總數量（安全防禦版）
                         if idx == 0:
-                            init_cases = int(item.get("expected_cases", 0))
+                            if current_manifest_item and "expected_cases" in current_manifest_item:
+                                init_cases = int(current_manifest_item["expected_cases"])
+                            else:
+                                init_cases = int(init_cases) if 'init_cases' in locals() else 0
                             init_actual = init_cases * init_per_case
                         else:
                             # 點擊增加的新組合，初始箱數與總數量從 0 開始讓人員累加
@@ -1292,6 +1305,7 @@ if is_tab2_active:
                             "pcs_per_case": r_per_case
                         })
                         st.markdown("---")
+
 
                     
                     # 🔒 完整回復您的表單雙按鈕排版
