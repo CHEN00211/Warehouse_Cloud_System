@@ -181,23 +181,33 @@ if "db" not in st.session_state:
 # =========================================================
 # 🛠️ 5. UI 設定 - 核心阻斷：完全取代 st.tabs 以徹底根除穿透
 # =========================================================
-# 1. 建立或讀取目前活躍的分頁名稱（由按鈕實時控制）
+# 1. 初始化全域分頁追蹤器（只在開機時執行一次）
 if "current_active_tab" not in st.session_state:
     st.session_state.current_active_tab = "上傳明細"
 
-# 2. ⚡ 絕殺：改用橫向單選按鈕來當作分頁標籤，這會直接出現在畫面上，外觀精美且絕不穿透！
-st.session_state.current_active_tab = st.radio(
+# 2. ⚡ 終極修正：直接宣告 radio，利用它的 key 自動維持狀態，絕不使用 index= 互相拉扯！
+# 我們改用一個乾淨的臨時變數來接收，並在點擊時觸發對齊
+def on_tab_change():
+    # 只要使用者一點擊，就立刻把最新選擇的頁籤強制更新到核心記憶體中
+    st.session_state.current_active_tab = st.session_state.nav_radio_slot
+
+chosen_tab = st.radio(
     "系統功能導航", 
     ["上傳明細", "PDA驗收", "實體盤點"], 
-    index=["上傳明細", "PDA驗收", "實體盤點"].index(st.session_state.current_active_tab),
+    key="nav_radio_slot", # 綁定專屬 key，Streamlit 會自動幫它記住狀態，絕對不閃退
     horizontal=True,
-    label_visibility="visible" # 讓使用者直接點擊這三個按鈕來切換分頁
+    label_visibility="visible",
+    on_change=on_tab_change # 當點擊發生時，立刻呼叫上面的對齊函式
 )
 
-# 為了完全相容您下方原有的程式碼，我們建立三個「虛擬閘門」
+# 確保全域狀態與目前的選擇百分之百同步
+st.session_state.current_active_tab = chosen_tab
+
+# 為了完全相容您下方原有的程式碼，維持三個虛擬閘門不變
 is_tab1_active = (st.session_state.current_active_tab == "上傳明細")
 is_tab2_active = (st.session_state.current_active_tab == "PDA驗收")
 is_tab4_active = (st.session_state.current_active_tab == "實體盤點")
+
 
 
 
