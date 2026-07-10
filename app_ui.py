@@ -1229,30 +1229,36 @@ if is_tab2_active:
                             init_per_case = 0
                             init_actual = 0
 
-                        # 🛠️ 完整回復並優化您的分欄結構 (箱數、箱入數、驗收數量、Lot批次、有效期限)
-                        col_box, col_per, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
+                        # 🛠️ 1. 調整寬度權重，並將第一欄對調為【箱入數】、第二欄對調為【箱數】
+                        col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                         
-                        with col_box:
-                            r_cases = st.number_input(
-                                "箱數" if st.session_state.lang == "zh" else "箱数", 
-                                min_value=0, 
-                                value=init_cases, 
-                                step=1, 
-                                key=f"box_r_{selected_order}_{idx}"
-                            )
                         with col_per:
+                            # 🛠️ 2. 固定箱入數：精準讀取您當初 CSV 上傳的固定值，並加上 disabled=True 鎖定反灰
                             r_per_case = st.number_input(
                                 "箱入數" if st.session_state.lang == "zh" else "入数", 
                                 min_value=0, 
-                                value=init_per_case, 
+                                value=int(init_per_case), 
                                 step=1,
-                                key=f"per_r_{selected_order}_{idx}"
+                                key=f"per_r_{selected_order}_{idx}",
+                                disabled=True # 👈 鎖定，不讓點貨人員手動亂改
+                            )
+                        with col_box:
+                            # 🛠️ 3. 箱數：維持可動狀態，讓人員根據現場清點數量進行加減
+                            r_cases = st.number_input(
+                                "箱數" if st.session_state.lang == "zh" else "箱数", 
+                                min_value=0, 
+                                value=int(init_cases), 
+                                step=1, 
+                                key=f"box_r_{selected_order}_{idx}"
                             )
                         with col_field1:
+                            # 🛠️ 4. 智慧乘法連動：總驗收數量 = 現有的箱數(r_cases) × 鎖定的箱入數(r_per_case)
+                            calculated_total = r_cases * r_per_case
+                            
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
-                                value=init_actual, 
+                                value=calculated_total, # 👈 全自動智慧連動計算
                                 step=1,
                                 key=f"act_r_{selected_order}_{idx}"
                             )
