@@ -1232,51 +1232,60 @@ if is_tab2_active:
                         # =========================================================
                         # 📦 多組合欄位動態渲染區塊 (支援拆單點收、多效期與 Lot 批次)
                         # =========================================================
-                        # 🛠️ 終極修正：直接使用 init_per_case，不再重新用閘門去撈外部變數，防止被其他商品的舊緩存污染！
-                        # 只要確保本區塊執行前，系統原有的 init_per_case 與 init_cases 有被正確讀取即可。
+                        # 🛠️ 終極數據對齊：無條件完全服從 CSV 原始名冊數據，徹底消滅任何寫死的「數字 10」！
                         
-                        # 根據是不是第一個組合，給予預設的初始箱數與初始總數量
-                        if idx == 0:
-                            # 組合 1 的初始箱數與箱入數完全遵循系統一開始解析出來的值
-                            current_render_per_case = int(init_per_case) if int(init_per_case) > 0 else 10
-                            current_render_cases = int(init_cases)
-                            init_actual_value = current_render_cases * current_render_per_case
-                        else:
-                            # 點擊增加的組合 2、組合 3，箱入數必須【強制同步複製】組合 1 的數值，絕不帶入 360！
-                            current_render_per_case = int(init_per_case) if int(init_per_case) > 0 else 10
-                            init_cases = 0
-                            init_actual_value = 0
+                        # 1. 為了防止 Pandas 將 CSV 數字誤轉為帶有小數點的浮點數（如 24.0），我們先強制融化格式再轉 int
+                        try:
+                            csv_pcs_per_case = int(float(init_per_case))
+                        except:
+                            # 萬一發生極端例外，安全回歸至最原汁原味的原始變數值
+                            csv_pcs_per_case = int(init_per_case)
 
-                        # 🛠️ 1. 調整寬度權重，並將第一欄對調為【箱入數】、第二欄對調為【箱數】
+                        try:
+                            csv_expected_cases = int(float(init_cases))
+                        except:
+                            csv_expected_cases = int(init_cases)
+
+                        # 2. 根據是不是第一個組合，精準分配從 CSV 讀取出來的初始值
+                        if idx == 0:
+                            # 組合 1 的初始箱數與箱入數，完全、無條件百分之百尊崇 CSV 原始名冊的設定
+                            current_render_per_case = csv_pcs_per_case
+                            current_render_cases = csv_expected_cases
+                        else:
+                            # 點擊增加的組合 2、組合 3，箱入數必須【強制同步複製】組合 1 的 CSV 數值，箱數從 0 開始讓人員累加
+                            current_render_per_case = csv_pcs_per_case
+                            current_render_cases = 0
+
+                        # 🛠️ 1. 調整寬度權重，並將第一欄對調為【箱入數】、第二欄對對調為【箱數】
                         col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                         
                         with col_per:
-                            # 🛠️ 2. 固定箱入數：不管人員按幾次增加欄位，組合 1 與組合 2 的箱入數保證絕對同步對齊！
+                            # 🛠️ 2. 固定箱入數：不管是組合 1 還是新增的組合 2，箱入數保證精準抓取 CSV 數據並反灰鎖定！
                             r_per_case = st.number_input(
                                 "箱入數" if st.session_state.lang == "zh" else "入数", 
                                 min_value=0, 
-                                value=current_render_per_case, # 👈 修正：組合 1 與組合 2 一律同步使用目前的商品箱入數
+                                value=current_render_per_case, # 👈 完美同步 CSV 數據（絕不被 10 污染）
                                 step=1,
                                 key=f"per_r_{selected_order}_{idx}",
-                                disabled=True # 👈 鎖定反灰
+                                disabled=True # 👈 鎖定反灰，禁止手動修改
                             )
                         with col_box:
-                            # 🛠️ 3. 箱數：維持可動狀態
+                            # 🛠️ 3. 箱數：維持可動狀態，組合 1 自動帶出 CSV 箱數，組合 2 預設為 0
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
-                                value=init_cases, 
+                                value=current_render_cases, # 👈 完美同步 CSV 數據
                                 step=1, 
                                 key=f"box_r_{selected_order}_{idx}"
                             )
                         with col_field1:
-                            # 🛠️ 4. 智慧乘法連動：總驗收數量 = 現有的箱數(r_cases) × 鎖定的箱入數(r_per_case)
+                            # 🛠️ 4. 智慧乘法連動：總驗收數量 = 現有的箱數(r_cases) × 鎖定的 CSV 箱入數(r_per_case)
                             calculated_total = r_cases * r_per_case
                             
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
-                                value=calculated_total, # 👈 全自動智慧乘法更新
+                                value=calculated_total, # 👈 不論哪一個項目組合，都能全自動即時進行乘法連動更新
                                 step=1,
                                 key=f"act_r_{selected_order}_{idx}"
                             )
@@ -1295,6 +1304,7 @@ if is_tab2_active:
                             "pcs_per_case": r_per_case
                         })
                         st.markdown("---")
+
 
 
                     
