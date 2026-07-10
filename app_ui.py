@@ -1122,14 +1122,14 @@ with tab2:
                 if target_jan and current_manifest_pool:
                     if target_jan in current_manifest_pool:
                         item = current_manifest_pool[target_jan]
-                        st.session_state.current_verified_jan = target_jan
+                        st.session_state.pda_current_verified_jan = target_jan
                         st.session_state.pda_temp_name_ja = item["name_ja"]
                         st.session_state.pda_temp_expected_count = item["expected_count"]
                         st.session_state.pda_temp_actual_count = item["expected_count"]  
-                        st.session_state.show_dup_warning = (item.get("status") == "決收點貨" or item.get("status") == "已點收驗收")
+                        st.session_state.pda_show_dup_warning = (item.get("status") == "決收點貨" or item.get("status") == "已點收驗收")
                         st.session_state.pda_error_msg = ""
                     else:
-                        st.session_state.current_verified_jan = "ERROR_NOT_FOUND"
+                        st.session_state.pda_current_verified_jan = "ERROR_NOT_FOUND"
                         st.session_state.pda_error_msg = t["jan_not_found"]
                         
                 # 🔒 key + 1 必須在 if 結束後、函式結束前執行
@@ -1140,17 +1140,17 @@ with tab2:
 
             if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
                 st.error(st.session_state.pda_error_msg.replace("！", ""))
-                st.session_state.current_verified_jan = ""
+                st.session_state.pda_current_verified_jan = ""
                 st.session_state.pda_temp_name_ja = ""
                 st.session_state.pda_temp_expected_count = 0
                 st.session_state.pda_temp_actual_count = 0
-                st.session_state.show_dup_warning = False
+                st.session_state.pda_show_dup_warning = False
             # ==========================================
             # PART 4-2 (上): Tab2 確認提交表單與動態欄位生成
             # ==========================================
-            if st.session_state.current_verified_jan and st.session_state.current_verified_jan != "ERROR_NOT_FOUND":
+            if st.session_state.get("pda_current_verified_jan") and st.session_state.get("pda_current_verified_jan") != "ERROR_NOT_FOUND":
                 st.markdown("---")
-                if st.session_state.show_dup_warning:
+                if st.session_state.pda_show_dup_warning:
                     st.warning(t["dup_warning"].replace("？", "").replace("！", ""))
                     
                 info_df = pd.DataFrame([
