@@ -1219,15 +1219,18 @@ if is_tab2_active:
                     for idx in range(st.session_state[f"row_count_{selected_order}"]):
                         st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                         
-                        # 初始狀態填入預設值：第一組自動帶入 Data 數值，新增組預設為 0
+                        # 初始狀態填入預設值
                         if idx == 0:
-                            init_cases = int(db_expected_cases)
-                            init_per_case = int(db_pcs_per_case)
+                            # 第一組自動帶入 Data 數值
+                            init_cases = int(db_expected_cases)   # 這會讀到 CSV 的 3
+                            init_per_case = int(db_pcs_per_case) # 這會讀到 CSV 的 18
                             init_actual = int(st.session_state.pda_temp_actual_count) 
                         else:
-                            init_cases = 0
-                            init_per_case = 0
+                            # 🛠️ 新增組：箱入數一樣要固定抓 CSV 的規格！不能給 0
+                            init_cases = 0   # 新增組的箱數預設為 0 讓人員往上加
+                            init_per_case = int(db_pcs_per_case) # 👈 強制鎖定！不論新增幾組，箱入數都抓 CSV 的 18
                             init_actual = 0
+
 
                         # 🛠️ 1. 調整寬度權重，並將第一欄對調為【箱入數】、第二欄對調為【箱數】
                         col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
