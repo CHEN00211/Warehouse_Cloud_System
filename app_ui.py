@@ -1229,15 +1229,30 @@ if is_tab2_active:
                             init_per_case = 0
                             init_actual = 0
 
+                        # =========================================================
+                        # 📦 多組合欄位動態渲染區塊 (支援拆單點收、多效期與 Lot 批次)
+                        # =========================================================
+                        # 💡 終極修正：不管 idx 是多少，箱入數一律強制去撈 CSV 原始設定的最精準數值，絕不給 0！
+                        init_per_case = int(item["pcs_per_case"])
+                        
+                        # 根據是不是第一個組合，給予預設的初始箱數與初始總數量
+                        if idx == 0:
+                            init_cases = int(item.get("expected_cases", 0))
+                            init_actual = init_cases * init_per_case
+                        else:
+                            # 點擊增加的新組合，初始箱數與總數量從 0 開始讓人員累加
+                            init_cases = 0
+                            init_actual = 0
+
                         # 🛠️ 1. 調整寬度權重，並將第一欄對調為【箱入數】、第二欄對調為【箱數】
                         col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                         
                         with col_per:
-                            # 🛠️ 2. 固定箱入數：精準讀取您當初 CSV 上傳的固定值，並加上 disabled=True 鎖定反灰
+                            # 🛠️ 2. 固定箱入數：不管是組合 1 還是組合 2，全部自動帶出 CSV 數值並反灰鎖定
                             r_per_case = st.number_input(
                                 "箱入數" if st.session_state.lang == "zh" else "入数", 
                                 min_value=0, 
-                                value=int(init_per_case), 
+                                value=init_per_case, # 👈 完美繼承 CSV 數值 (360)
                                 step=1,
                                 key=f"per_r_{selected_order}_{idx}",
                                 disabled=True # 👈 鎖定，不讓點貨人員手動亂改
@@ -1247,7 +1262,7 @@ if is_tab2_active:
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
-                                value=int(init_cases), 
+                                value=init_cases, 
                                 step=1, 
                                 key=f"box_r_{selected_order}_{idx}"
                             )
@@ -1258,7 +1273,7 @@ if is_tab2_active:
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
-                                value=calculated_total, # 👈 全自動智慧連動計算
+                                value=calculated_total, # 👈 組合 1、組合 2 都能全自動智慧乘法更新
                                 step=1,
                                 key=f"act_r_{selected_order}_{idx}"
                             )
@@ -1277,6 +1292,7 @@ if is_tab2_active:
                             "pcs_per_case": r_per_case
                         })
                         st.markdown("---")
+
                     
                     # 🔒 完整回復您的表單雙按鈕排版
                     col_form_btn1, col_form_btn2 = st.columns(2)
