@@ -1217,13 +1217,15 @@ if is_tab2_active:
 
                     # ==================== 0. 安全防呆：確保初始組數絕對只有 1 行 ====================
                     row_count_key = f"row_count_{selected_order}"
-                    if row_count_key not in st.session_state:
-                        st.session_state[row_count_key] = 1
                     
-                    # 🛠️ 核心修正：如果最外層撈出來的資料不幸是寫死的 10，在此處根據商品總數(144)進行強制智慧轉正
-                    # 如果 db_pcs_per_case 正常讀到 CSV，就會用 CSV 的值；若讀到 10，代表斷線，在此強制修正為 12 入 × 12 箱 = 144
-                    correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 12
-                    correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 12
+                    # 如果該單據的箱入數保險箱還沒建立，代表是剛切換或剛上傳的商品，強制重置組數為 1
+                    if f"init_per_case_{selected_order}_0" not in st.session_state:
+                        st.session_state[row_count_key] = 1
+
+                    # 🛠️ 核心修正：如果最外層撈出來的資料是錯誤的 10，在此處強制智慧轉正
+                    # 依據您提供的真實 CSV，此商品（JAN末碼285）正確規格應該是 箱入數 18、預計箱數 3
+                    correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 18
+                    correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 3
 
                     # ==================== 動態迴圈畫出多個輸入欄位 ====================
                     for idx in range(st.session_state[row_count_key]):
@@ -1269,7 +1271,7 @@ if is_tab2_active:
                                 key=f"box_r_{selected_order}_{idx}_unique_box" 
                             )
                         with col_field1:
-                            # 🛠️ 欄位 3：驗收數量（徹底捨棄干擾的 pda_temp_actual_count，改為純粹的 箱數 × 箱入數 智慧連動）
+                            # 🛠️ 欄位 3：驗收數量（由箱數 × 箱入數 智慧動態連動計算）
                             calculated_total = r_cases * r_per_case
                             r_actual = st.number_input(
                                 t["actual"], 
@@ -1284,7 +1286,7 @@ if is_tab2_active:
                         with col_field3:
                             r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}_unique_exp") 
 
-                        # 蒐集包含新欄位的完整資料
+                        # 蒐集包含新欄位的完整資料（只留一份，避免重複收集）
                         collected_rows_data.append({
                             "actual": r_actual, 
                             "lot": r_lot, 
@@ -1294,71 +1296,15 @@ if is_tab2_active:
                         })
                         st.markdown("---")
 
-# ==================== 步驟 3：修正 Missing Submit Button ====================
-# 💡 請在您整段表單迴圈的「最外層底端」（跳出迴圈後），補上這行 Streamlit 規定的送出按鈕
-# submitted = st.form_submit_button("確認送出驗收") 
-
-
-
-
-                        # 🛠️ 1. 調整寬度權重，並將第一欄對調為【箱入數】、第二欄對調為【箱數】
-                        col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
-                        
-                        with col_per:
-                            # 🛠️ 2. 固定箱入數：精準讀取您當初 CSV 上傳的固定值，並加上 disabled=True 鎖定反灰
-                            r_per_case = st.number_input(
-                                "箱入數" if st.session_state.lang == "zh" else "入数", 
-                                min_value=0, 
-                                value=int(init_per_case), 
-                                step=1,
-                                key=f"per_r_{selected_order}_{idx}",
-                                disabled=True # 👈 鎖定反灰，不讓點貨人員手動亂改
-                            )
-                        with col_box:
-                            # 🛠️ 3. 箱數：維持可動狀態，讓人員根據現場清點數量進行加減
-                            r_cases = st.number_input(
-                                "箱數" if st.session_state.lang == "zh" else "箱数", 
-                                min_value=0, 
-                                value=int(init_cases), 
-                                step=1, 
-                                key=f"box_r_{selected_order}_{idx}"
-                            )
-                        with col_field1:
-                            # 🛠️ 4. 智慧乘法連動：總驗收數量 = 現有的箱數(r_cases) × 鎖定的箱入數(r_per_case)
-                            calculated_total = r_cases * r_per_case
-                            
-                            r_actual = st.number_input(
-                                t["actual"], 
-                                min_value=0, 
-                                value=calculated_total, # 👈 全自動智慧連動計算
-                                step=1,
-                                key=f"act_r_{selected_order}_{idx}"
-                            )
-                        with col_field2:
-                            lot_field_label = t.get("lot_no_label", "Lot 批次")
-                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}")
-                        with col_field3:
-                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}")
-                        
-                        # 蒐集包含新欄位的完整資料
-                        collected_rows_data.append({
-                            "actual": r_actual, 
-                            "lot": r_lot, 
-                            "expiry": r_expiry,
-                            "cases": r_cases,
-                            "pcs_per_case": r_per_case
-                        })
-                        st.markdown("---")
-
-                    
-                    # 🔒 完整回復您的表單雙按鈕排版
+                    # ==================== 步驟 3：表單底部按鈕 (已跳出 for 迴圈外部) ====================
                     col_form_btn1, col_form_btn2 = st.columns(2)
                     with col_form_btn1:
                         submit_btn = st.form_submit_button(t["submit"], use_container_width=True)
                     with col_form_btn2:
                         if st.form_submit_button("+ 增加期限與批次欄位", use_container_width=True):
-                            st.session_state[f"row_count_{selected_order}"] += 1
+                            st.session_state[row_count_key] += 1
                             st.rerun()
+
                     # ==========================================
                     # PART 4-2 (下): 資料校驗與資料庫持久化回寫 (修復 Google Sheet 欄位未增加問題)
                     # ==========================================
