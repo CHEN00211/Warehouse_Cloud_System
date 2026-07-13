@@ -1266,24 +1266,39 @@ if is_tab2_active:
                                 key=f"per_r_{selected_order}_{current_jan}_{idx}_unique_per", 
                                 disabled=True 
                             )
+                        # 先定義這一組驗收數量的專屬 Key 名稱
+                        actual_widget_key = f"act_r_{selected_order}_{current_jan}_{idx}_unique_act"
+
+                        # 🛠️ 1. 智慧連動核心函數：當箱數改變，或是欄位一長出來時，強制改寫驗收數量的狀態
+                        def sync_actual_quantity(index=idx, per_case=init_per_case):
+                            box_widget_key = f"box_r_{selected_order}_{current_jan}_{index}_unique_box"
+                            # 安全取得目前輸入框的箱數
+                            current_box_val = st.session_state.get(box_widget_key, 0)
+                            # 強制將相乘結果寫入驗收數量的 key 中
+                            st.session_state[actual_widget_key] = int(current_box_val * per_case)
+
                         with col_box:
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
                                 value=int(init_cases), 
                                 step=1, 
-                                key=f"box_r_{selected_order}_{current_jan}_{idx}_unique_box" 
+                                key=f"box_r_{selected_order}_{current_jan}_{idx}_unique_box",
+                                on_change=sync_actual_quantity # 👈 只要箱數一有變動，自動計算
                             )
+                            
                         with col_field1:
-                            # 🛠️ 終極連動修正：直接將 (r_cases * r_per_case) 當作 value 寫進去
-                            # 這樣當「項目組合 2」一長出來，或者任何人手動修改箱數時，驗收數量就會 100% 被強迫自動相乘！
+                            # 🛠️ 2. 如果驗收數量的保險箱還沒有值（剛長出來時），先幫它算好初始值
+                            if actual_widget_key not in st.session_state:
+                                st.session_state[actual_widget_key] = int(init_cases * init_per_case)
+
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
-                                value=int(r_cases * r_per_case), # 👈 直接在這裡相乘！
                                 step=1,
-                                key=f"act_r_{selected_order}_{current_jan}_{idx}_unique_act" 
+                                key=actual_widget_key # 👈 完全交由保險箱控制，不再使用 value= 覆蓋
                             )
+
 
                         with col_field2:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
