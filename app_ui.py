@@ -1042,53 +1042,60 @@ if is_tab1_active:
                 if target_to_delete in db["manifest_by_order"]:
                     del db["manifest_by_order"][target_to_delete]
                     
-                    # 💡 核心修正：將刪除後的嵌套字典結構攤平成標準數據列
+                    # 💡 繞過 save_data 的終極解決方案：直接在外面包裝成 Google Sheets 專用的文字矩陣
                     manifest_sheet = get_google_sheet("Manifest")
                     flattened_rows = []
+                    
+                    # 定義標準的 13 個欄位名稱（必須跟您的雲端第一列標頭完全一致）
+                    columns_template = [
+                        "order_no", "vendor", "expected_delive", "operator", "jan_code", 
+                        "name_ja", "expected_count", "actual_count", "expected_cases", 
+                        "pcs_per_case", "actual_cases", "status", "archived_order"
+                    ]
+                    
+                    # 1. 重新攤平剩餘的資料
                     for o_no, doc in db["manifest_by_order"].items():
                         info = doc.get("info", {})
                         for jan_code, item in doc.get("items", {}).items():
                             flattened_rows.append({
-                                "order_no": str(o_no).strip().zfill(7), # 順便加強單號補零防護，確保回寫不縮水
-                                "vendor": info.get("vendor", "-"),
-                                "expected_delive": info.get("expected_delivery", "-"),
-                                "operator": info.get("operator", "-"),
-                                "jan_code": jan_code,
-                                "name_ja": item.get("name_ja", "-"),
-                                "expected_count": item.get("expected_count", 0),
-                                "actual_count": item.get("actual_count", 0),
-                                "expected_cases": item.get("expected_cases", 0),
-                                "pcs_per_case": item.get("pcs_per_case", 0),
-                                "actual_cases": item.get("actual_cases", 0),
-                                "status": item.get("status", "未點收"),
+                                "order_no": str(o_no).strip().zfill(7), # 強制完美補零
+                                "vendor": str(info.get("vendor", "-")),
+                                "expected_delive": str(info.get("expected_delivery", "-")),
+                                "operator": str(info.get("operator", "-")),
+                                "jan_code": str(jan_code),
+                                "name_ja": str(item.get("name_ja", "-")),
+                                "expected_count": str(item.get("expected_count", 0)),
+                                "actual_count": str(item.get("actual_count", 0)),
+                                "expected_cases": str(item.get("expected_cases", 0)),
+                                "pcs_per_case": str(item.get("pcs_per_case", 0)),
+                                "actual_cases": str(item.get("actual_cases", 0)),
+                                "status": str(item.get("status", "未點收")),
                                 "archived_order": str(doc.get("archived_order", False))
                             })
                     
-                    if flattened_rows:
-                        # 還其他單據，正常進行型態轉換與存檔
-                        df_save = pd.DataFrame(flattened_rows)
-                        df_save["order_no"] = df_save["order_no"].astype(str).str.strip().str.zfill(7)
+                    try:
+                        # 2. 🧽 徹底清空目前的 Google Sheet 內容，準備重新寫入
+                        manifest_sheet.clear()
                         
-                        # 💥 【就是這行！】強制把所有欄位轉成文字，徹底解決 1072 行的 TypeError
-                        df_save = df_save.astype(str)
+                        # 3. 📝 準備好要傳送的二維矩陣資料，第一列永遠是「欄位標頭」
+                        sheet_data = [columns_template]
                         
-                        save_data(df_save, manifest_sheet)
-                    else:
-                        # 💥 關鍵修復：單據已經被刪光了！建立帶有標準標頭的空 DataFrame
-                        columns_template = [
-                            "order_no", "vendor", "expected_delive", "operator", "jan_code", 
-                            "name_ja", "expected_count", "actual_count", "expected_cases", 
-                            "pcs_per_case", "actual_cases", "status", "archived_order"
-                        ]
-                        df_empty = pd.DataFrame(columns=columns_template)
+                        # 4. 把每一列資料依照欄位順序塞進去，並確保所有格子都是「純文字」
+                        for row_dict in flattened_rows:
+                            row_list = [row_dict[col] for col in columns_template]
+                            sheet_data.append(row_list)
                         
-                        # 💥 【保險起見】空的 DataFrame 也同樣強制轉成字串結構
-                        df_empty = df_empty.astype(str)
+                        # 5. 🚀 繞過所有 Pandas 轉型爭議，直接一口氣更新整張 Google Sheet！
+                        manifest_sheet.update("A1", sheet_data)
                         
-                        # 呼叫存檔，這會清空 Google Sheets 的內容，但保留正確的試算表標頭結構
-                        save_data(df_empty, manifest_sheet)
-
-                        
+                    except Exception as e:
+                        # 如果底層套件版本太舊，不支援 update(range, values)，則自動退回使用舊版 update_cells 邏輯
+                        try:
+                            manifest_sheet.update_values("A1", sheet_data)
+                        except:
+                            st.error(f"雲端寫入失敗，請檢查權限或網路: {str(e)}")
+                    
+                    # 6. 成功重整
                     st.rerun()
 
 
