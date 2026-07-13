@@ -1316,31 +1316,32 @@ if is_tab2_active:
                         key=f"dlg_sub_btn_{selected_order}_{current_jan}"
                     )
                     if submit_btn:
-                        # 💡 1. 執行您原本的處理存檔、寫入資料庫的邏輯程式碼
-                        # (請確保您的存檔邏輯放在這裡)
+                        # 💾 【重要】請確保您原本處理存檔、寫入資料庫、打 API 的原始程式碼放在這裡！
+                        # ---------------------------------------------------------
+                        # 範例：save_to_db(collected_rows_data) 
+                        # ---------------------------------------------------------
                         
-                        # 🧹 2. 自動清空核心機制：點擊確認提交後，動態清除本項目的所有快取欄位
+                        # 🧹 自動清空核心機制：點擊確認提交後，將所有欄位「數值重置」
                         for idx in range(st.session_state[row_count_key]):
-                            # 組合出當前列的所有獨立 Key
                             k_box = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}"
                             k_act = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
                             k_lot = f"dlg_lot_{selected_order}_{current_jan}_{idx}"
                             k_exp = f"dlg_exp_{selected_order}_{current_jan}_{idx}"
                             
-                            # 若快取存在則強制將其移除，使其在重整時恢復預設空白
-                            if k_box in st.session_state: del st.session_state[k_box]
-                            if k_act in st.session_state: del st.session_state[k_act]
-                            if k_lot in st.session_state: del st.session_state[k_lot]
-                            if k_exp in st.session_state: del st.session_state[k_exp]
+                            # 項目 1 恢復原始預設值，其餘項目恢復成 0 或空字串
+                            st.session_state[k_box] = correct_cases if idx == 0 else 0
+                            st.session_state[k_act] = int((correct_cases if idx == 0 else 0) * live_per_val)
+                            st.session_state[k_lot] = ""
+                            st.session_state[k_exp] = ""
                         
-                        # 🔢 3. 重置組合列數，讓畫面重新回到只有 1 組的乾淨狀態
+                        # 🔢 重置組合列數，讓畫面重新回到只有 1 組的乾淨狀態
                         st.session_state[row_count_key] = 1
                         
-                        # 🔄 4. 觸發頁面刷新，讓被清除的欄位即時以空白/預設值渲染
+                        # 🔄 強制即時刷新頁面，讓重置後的數值立刻顯示在畫面上
                         st.rerun()
                         
                 with col_btn2:
-                    # 點擊此按鈕，組數自動 +1 並即時強制重整重新繪製出乾淨的新一列組合
+                    # 點擊此按鈕，組數自動 +1 并即時強制重整重新繪製出乾淨的新一列組合
                     if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}"):
                         st.session_state[row_count_key] += 1
                         st.rerun()
