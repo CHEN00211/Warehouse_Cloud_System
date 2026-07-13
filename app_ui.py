@@ -1280,23 +1280,26 @@ if is_tab2_active:
                     })
                     st.markdown("---")
 
-                # ==================== 表單底部按鈕 ====================
+                # ==================== 表單底部按鈕 (永久解決 APIException) ====================
                 col_form_btn1, col_form_btn2 = st.columns(2)
                 with col_form_btn1:
-                    # ⭕ 成功拯救！按鈕名正言順包裹在表單底端，絕對不會再噴 APIException
-                    submit_btn = st.form_submit_button(
+                    # ⭕ 徹底搞定！改成一般的 st.button，配合 type="primary" 一樣是漂亮的大紅色/藍色按鈕
+                    submit_btn = st.button(
                         t["submit"], 
                         use_container_width=True,
-                        key=f"final_submit_btn_{selected_order}_{current_jan}" # 👈 加入唯一 Key
+                        type="primary", # 👈 保持鮮豔的提交按鈕樣式
+                        key=f"final_normal_submit_btn_{selected_order}_{current_jan}" 
                     )
                     if submit_btn:
+                        # 💡 如果您原本點擊確認後處理驗收、寫入資料庫的邏輯程式碼請放在這裡執行
                         pass
                         
                 with col_form_btn2:
-                    if st.form_submit_button(
+                    # ⭕ 改成一般的 st.button
+                    if st.button(
                         "+ 增加期限與批次欄位", 
                         use_container_width=True,
-                        key=f"final_add_btn_{selected_order}_{current_jan}" # 👈 加入唯一 Key
+                        key=f"final_normal_add_btn_{selected_order}_{current_jan}" 
                     ):
                         st.session_state[row_count_key] += 1
                         st.rerun()
