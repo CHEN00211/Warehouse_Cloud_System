@@ -1269,34 +1269,36 @@ if is_tab2_active:
                         # 先定義這一組驗收數量的專屬 Key 名稱
                         actual_widget_key = f"act_r_{selected_order}_{current_jan}_{idx}_unique_act"
 
-                        # 🛠️ 1. 智慧連動核心函數：當箱數改變，或是欄位一長出來時，強制改寫驗收數量的狀態
-                        def sync_actual_quantity(index=idx, per_case=init_per_case):
-                            box_widget_key = f"box_r_{selected_order}_{current_jan}_{index}_unique_box"
-                            # 安全取得目前輸入框的箱數
-                            current_box_val = st.session_state.get(box_widget_key, 0)
-                            # 強制將相乘結果寫入驗收數量的 key 中
-                            st.session_state[actual_widget_key] = int(current_box_val * per_case)
+                        # 1. 宣告這一組【箱數】與【驗收數量】的專屬 Key 名稱
+                        box_widget_key = f"box_r_{selected_order}_{current_jan}_{idx}_unique_box"
+                        actual_widget_key = f"act_r_{selected_order}_{current_jan}_{idx}_unique_act"
+
+                        # 2. 智慧預算機制：在畫面畫出來之前，先把正確的總驗收數量算好塞進保險箱
+                        if box_widget_key not in st.session_state:
+                            st.session_state[box_widget_key] = int(init_cases)
+                        
+                        # 隨時根據目前輸入的箱數，即時更新驗收數量的快取值
+                        current_box_count = st.session_state[box_widget_key]
+                        st.session_state[actual_widget_key] = int(current_box_count * init_per_case)
 
                         with col_box:
+                            # 🛠️ 欄位 2：箱數（完全移除 on_change，改由 value 來觸發即時重新渲染）
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
-                                value=int(init_cases), 
+                                value=st.session_state[box_widget_key], # 👈 綁定安全快取值
                                 step=1, 
-                                key=f"box_r_{selected_order}_{current_jan}_{idx}_unique_box",
-                                on_change=sync_actual_quantity # 👈 只要箱數一有變動，自動計算
+                                key=box_widget_key
                             )
                             
                         with col_field1:
-                            # 🛠️ 2. 如果驗收數量的保險箱還沒有值（剛長出來時），先幫它算好初始值
-                            if actual_widget_key not in st.session_state:
-                                st.session_state[actual_widget_key] = int(init_cases * init_per_case)
-
+                            # 🛠️ 欄位 3：驗收數量（同樣綁定算好的快取值）
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
+                                value=st.session_state[actual_widget_key], # 👈 一長出來就是相乘後的正確數字！
                                 step=1,
-                                key=actual_widget_key # 👈 完全交由保險箱控制，不再使用 value= 覆蓋
+                                key=actual_widget_key 
                             )
 
 
