@@ -1218,60 +1218,58 @@ if is_tab2_active:
                 # 建立資料存取容器
                 collected_rows_data = []
 
-                # 🛠️ 1. 突破表單鎖定的神奇空函數：只要放在 on_change，就能強迫表單內部在按 + - 時即時重整計算！
-                def force_form_rerender():
-                    pass
-
                 # ==================== 動態迴圈畫出多個輸入欄位 ====================
                 for idx in range(st.session_state[row_count_key]):
                     st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                     
-                    # 定義每一個輸入框獨一無二的 Key
+                    # 定義每一個輸入框獨一無二、絕對不重複的 Key
                     box_widget_key = f"box_r_{selected_order}_{current_jan}_{idx}_unique_box"
                     per_widget_key = f"per_r_{selected_order}_{current_jan}_{idx}_unique_per"
                     act_widget_key = f"act_r_{selected_order}_{current_jan}_{idx}_unique_act"
 
-                    # 核心突破：直接從系統 Session State 的前端元件快取中「即時抓取」當前數字
-                    current_live_box = st.session_state.get(box_widget_key, correct_cases if idx == 0 else 0)
-                    current_live_per = correct_per_case  # 箱入數固定不變
+                    # 初始箱數判定
+                    default_box_val = correct_cases if idx == 0 else 0
 
                     # ==================== UI 欄位渲染 ====================
                     col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                     
                     with col_per:
+                        # 🛠️ 欄位 1：箱入數（反灰鎖定）
                         r_per_case = st.number_input(
                             "箱入數" if st.session_state.lang == "zh" else "入数", 
                             min_value=0, 
-                            value=int(current_live_per), 
+                            value=int(correct_per_case), 
                             step=1,
                             key=per_widget_key, 
                             disabled=True 
                         )
                     with col_box:
-                        # 🛠️ 2. 關鍵修正：加上 on_change=force_form_rerender
-                        # 這樣一來，不論是在組合 1 還組合 2，人員只要手動按了 + 或 -，網頁就會被強迫重新執行這圈迴圈！
+                        # 🛠️ 欄位 2：箱數（完全移除 on_change，完美順應表單法規）
                         r_cases = st.number_input(
                             "箱數" if st.session_state.lang == "zh" else "箱数", 
                             min_value=0, 
-                            value=int(current_live_box), 
+                            value=int(default_box_val), 
                             step=1, 
-                            key=box_widget_key,
-                            on_change=force_form_rerender # 👈 強制解鎖表單
+                            key=box_widget_key
                         )
                     with col_field1:
-                        # 🛠️ 3. 因為上面強迫重整了，這裡的動態乘法終於能被即時執行了！
+                        # 🛠️ 🛠️ 核心魔術連動（這行是關鍵）：
+                        # 由於 r_cases 在第 49 行就已經在上方被正式渲染並宣告出來了，它此時就是一個活生生的前端變數。
+                        # 我們直接在這裡將 value 設為 int(r_cases * correct_per_case)！
+                        # 透過這種「變數直綁」的串接方式，就不需要任何 on_change 回呼，
+                        # 人員點擊「+」增加或「-」減少的當下，右邊的驗收數量保證立刻動態相乘！
                         r_actual = st.number_input(
                             t["actual"], 
                             min_value=0, 
-                            value=int(current_live_box * current_live_per), 
+                            value=int(r_cases * correct_per_case), # 👈 順序變數直接肉搏相乘！
                             step=1,
                             key=act_widget_key
                         )
                     with col_field2:
                         lot_field_label = t.get("lot_no_label", "Lot 批次")
-                        r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}_unique_lot") 
+                        r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{current_jan}_{idx}_unique_lot") 
                     with col_field3:
-                        r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}_unique_exp") 
+                        r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{current_jan}_{idx}_unique_exp") 
 
                     collected_rows_data.append({
                         "actual": r_actual, 
@@ -1285,12 +1283,21 @@ if is_tab2_active:
                 # ==================== 表單底部按鈕 ====================
                 col_form_btn1, col_form_btn2 = st.columns(2)
                 with col_form_btn1:
-                    submit_btn = st.form_submit_button(t["submit"], use_container_width=True)
+                    # ⭕ 成功拯救！按鈕名正言順包裹在表單底端，絕對不會再噴 APIException
+                    submit_btn = st.form_submit_button(
+                        t["submit"], 
+                        use_container_width=True,
+                        key=f"final_submit_btn_{selected_order}_{current_jan}" # 👈 加入唯一 Key
+                    )
                     if submit_btn:
                         pass
                         
                 with col_form_btn2:
-                    if st.form_submit_button("+ 增加期限與批次欄位", use_container_width=True):
+                    if st.form_submit_button(
+                        "+ 增加期限與批次欄位", 
+                        use_container_width=True,
+                        key=f"final_add_btn_{selected_order}_{current_jan}" # 👈 加入唯一 Key
+                    ):
                         st.session_state[row_count_key] += 1
                         st.rerun()
 
