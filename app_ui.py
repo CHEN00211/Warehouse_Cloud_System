@@ -1307,11 +1307,8 @@ if is_tab2_active:
                     st.markdown("---")
 
                 # ==================== 對話框專屬：底部控制按鈕區 ====================
-                # 🛠️ 調整比例：改為 [2.5, 2.5] 完全平分，讓兩個按鈕大小一致、更加平均好看！
-                # 如果希望左邊按鈕稍微寬一點點，也可以嘗試改用 [2.7, 2.3]
                 col_btn1, col_btn2 = st.columns([2.5, 2.5])
                 with col_btn1:
-                    # 🛠️ 核心修復：維持變數賦值，解決後續邏輯的 NameError
                     submit_btn = st.button(
                         t["submit"] if "submit" in t else "確認提交", 
                         use_container_width=True, 
@@ -1319,8 +1316,28 @@ if is_tab2_active:
                         key=f"dlg_sub_btn_{selected_order}_{current_jan}"
                     )
                     if submit_btn:
-                        # 💡 您原本點擊確認後處理存檔、寫入資料庫的邏輯程式碼會在這裡執行
-                        pass
+                        # 💡 1. 執行您原本的處理存檔、寫入資料庫的邏輯程式碼
+                        # (請確保您的存檔邏輯放在這裡)
+                        
+                        # 🧹 2. 自動清空核心機制：點擊確認提交後，動態清除本項目的所有快取欄位
+                        for idx in range(st.session_state[row_count_key]):
+                            # 組合出當前列的所有獨立 Key
+                            k_box = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}"
+                            k_act = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
+                            k_lot = f"dlg_lot_{selected_order}_{current_jan}_{idx}"
+                            k_exp = f"dlg_exp_{selected_order}_{current_jan}_{idx}"
+                            
+                            # 若快取存在則強制將其移除，使其在重整時恢復預設空白
+                            if k_box in st.session_state: del st.session_state[k_box]
+                            if k_act in st.session_state: del st.session_state[k_act]
+                            if k_lot in st.session_state: del st.session_state[k_lot]
+                            if k_exp in st.session_state: del st.session_state[k_exp]
+                        
+                        # 🔢 3. 重置組合列數，讓畫面重新回到只有 1 組的乾淨狀態
+                        st.session_state[row_count_key] = 1
+                        
+                        # 🔄 4. 觸發頁面刷新，讓被清除的欄位即時以空白/預設值渲染
+                        st.rerun()
                         
                 with col_btn2:
                     # 點擊此按鈕，組數自動 +1 並即時強制重整重新繪製出乾淨的新一列組合
