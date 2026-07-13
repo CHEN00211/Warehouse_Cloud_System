@@ -1275,14 +1275,16 @@ if is_tab2_active:
                                 key=f"box_r_{selected_order}_{current_jan}_{idx}_unique_box" 
                             )
                         with col_field1:
-                            calculated_total = r_cases * r_per_case
+                            # 🛠️ 終極連動修正：直接將 (r_cases * r_per_case) 當作 value 寫進去
+                            # 這樣當「項目組合 2」一長出來，或者任何人手動修改箱數時，驗收數量就會 100% 被強迫自動相乘！
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
-                                value=calculated_total, 
+                                value=int(r_cases * r_per_case), # 👈 直接在這裡相乘！
                                 step=1,
                                 key=f"act_r_{selected_order}_{current_jan}_{idx}_unique_act" 
                             )
+
                         with col_field2:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
                             r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{current_jan}_{idx}_unique_lot") 
