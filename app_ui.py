@@ -1219,28 +1219,23 @@ if is_tab2_active:
                     for idx in range(st.session_state[f"row_count_{selected_order}"]):
                         st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                         
-                        # 建立該欄位專屬的唯一 Key 名稱（確保每筆資料獨立）
-                        per_case_state_key = f"init_per_case_{selected_order}_{idx}"
-                        cases_state_key = f"init_cases_{selected_order}_{idx}"
-
-                        # 🛠️ 檢查保險箱：如果這個欄位第一次出現，才把 CSV 的值寫進去保存
-                        if per_case_state_key not in st.session_state:
-                            if idx == 0:
-                                st.session_state[per_case_state_key] = int(db_pcs_per_case)
-                                st.session_state[cases_state_key] = int(db_expected_cases)
-                            else:
-                                st.session_state[per_case_state_key] = int(db_pcs_per_case) # 新增組也強制鎖定 CSV 的箱入數
-                                st.session_state[cases_state_key] = 0
-
-                        # 將保險箱裡絕對不會被覆蓋的值，賦予給您的 UI 變數
-                        init_per_case = st.session_state[per_case_state_key]
-                        init_cases = st.session_state[cases_state_key]
-
-                        # 處理實際點貨數量
-                        if idx == 0:
-                            init_actual = int(st.session_state.pda_temp_actual_count)
-                        else:
-                            init_actual = 0
+                        with col_per:
+                            r_per_case = st.number_input(
+                                "箱入數" if st.session_state.lang == "zh" else "入数", 
+                                min_value=0, 
+                                value=int(init_per_case), # 👈 這裡會成功吃到步驟 1 保險箱裡的正確值
+                                step=1,
+                                key=f"per_r_{selected_order}_{idx}", # 👈 確保 key 有加上選單與索引識別
+                                disabled=True 
+                            )
+                        with col_box:
+                            r_cases = st.number_input(
+                                "箱數" if st.session_state.lang == "zh" else "箱数", 
+                                min_value=0, 
+                                value=int(init_cases), # 👈 這裡也會成功吃到步驟 1 的正確初始箱數
+                                step=1, 
+                                key=f"box_r_{selected_order}_{idx}"
+                            )
 
 
 
