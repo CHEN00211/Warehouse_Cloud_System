@@ -1217,7 +1217,7 @@ if is_tab2_active:
 
                     # 💡 請確認您系統中代表該商品條碼的變數名稱（例如：db_jan_code 或 row['jan_code']）
                     # 這裡假設您的條碼變數叫做 db_jan_code，請根據實際情況微調變數名
-                    current_jan = str(db_jan_code) 
+                    current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
 
                     # ==================== 0. 安全防呆：將條碼綁進組數 Key ====================
                     # 精準讀取您系統暫存的條碼
