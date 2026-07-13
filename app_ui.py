@@ -1290,9 +1290,15 @@ if is_tab2_active:
                 # ==================== 對話框專屬：底部控制按鈕區 ====================
                 col_btn1, col_btn2 = st.columns(2)
                 with col_btn1:
-                    # 使用普通的高權重按鈕作為提交按鈕，完全相容任何對話框結構
-                    if st.button(t["submit"], use_container_width=True, type="primary", key=f"dlg_sub_btn_{selected_order}_{current_jan}"):
-                        # 💡 您原本點擊確認後處理存檔、寫入資料庫的邏輯程式碼請放在這裡
+                    # 🛠️ 核心修復：加上 submit_btn = 賦值，徹底解決下方 if submit_btn 的 NameError 報錯
+                    submit_btn = st.button(
+                        t["submit"], 
+                        use_container_width=True, 
+                        type="primary", 
+                        key=f"dlg_sub_btn_{selected_order}_{current_jan}"
+                    )
+                    if submit_btn:
+                        # 💡 您原本點擊確認後處理存檔、寫入資料庫的邏輯程式碼會在這裡執行
                         pass
                         
                 with col_btn2:
@@ -1300,6 +1306,7 @@ if is_tab2_active:
                     if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}"):
                         st.session_state[row_count_key] += 1
                         st.rerun()
+
 
 
 
