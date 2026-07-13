@@ -128,9 +128,14 @@ if "db" not in st.session_state:
             
             temp_manifest = {}
             for row in raw_records:
-                o_no = str(row.get("order_no", "")).strip()
-                if not o_no:
+                # 🛠️ 核心修復：強制轉成字串，並用 .zfill(7) 自動在左邊補 0 直到滿 7 位數
+                # 這樣一來，不論 Google Sheets 裡面是 713001 還是 0713001，讀進系統通通都會變成穩定的 "0713001"
+                o_no = str(row.get("order_no", "")).strip().zfill(7)
+                
+                # 如果 zfill 後整串都是 0000000 或是本來就空值，則跳過
+                if not o_no or o_no == "0000000":
                     continue
+
                 
                 # 如果這個單號還沒建立，先初始化它的結構
                 if o_no not in temp_manifest:
