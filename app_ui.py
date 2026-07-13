@@ -1253,19 +1253,17 @@ if is_tab2_active:
                                 min_value=0, 
                                 value=int(init_per_case), 
                                 step=1,
-                                key=f"per_r_{selected_order}_{idx}",
-                                disabled=True # 👈 鎖定反灰
+                                key=f"per_r_{selected_order}_{idx}_unique_per", # 👈 加強唯一性後綴
+                                disabled=True 
                             )
-                            
                         with col_box:
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
                                 value=int(init_cases), 
                                 step=1, 
-                                key=f"box_r_{selected_order}_{idx}"
+                                key=f"box_r_{selected_order}_{idx}_unique_box" # 👈 加強唯一性後綴
                             )
-                            
                         with col_field1:
                             calculated_total = r_cases * r_per_case
                             r_actual = st.number_input(
@@ -1273,15 +1271,14 @@ if is_tab2_active:
                                 min_value=0, 
                                 value=calculated_total, 
                                 step=1,
-                                key=f"act_r_{selected_order}_{idx}"
+                                key=f"act_r_{selected_order}_{idx}_unique_act" # 👈 加強唯一性後綴
                             )
-                            
                         with col_field2:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
-                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}")
-                            
+                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}_unique_lot") # 👈 加強唯一性後綴
                         with col_field3:
-                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}")
+                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}_unique_exp") # 👈 加強唯一性後綴
+
                         
                         # 蒐集完整資料
                         collected_rows_data.append({
