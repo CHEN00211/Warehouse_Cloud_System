@@ -1064,14 +1064,17 @@ if is_tab1_active:
                                 "archived_order": str(doc.get("archived_order", False))
                             })
                     
-                    # 🛠️ 核心防崩潰機制：檢查攤平後是否還有資料
                     if flattened_rows:
-                        # 還有其他單據，正常進行型態轉換與存檔
+                        # 還其他單據，正常進行型態轉換與存檔
                         df_save = pd.DataFrame(flattened_rows)
                         df_save["order_no"] = df_save["order_no"].astype(str).str.strip().str.zfill(7)
+                        
+                        # 💥 【就是這行！】強制把所有欄位轉成文字，徹底解決 1072 行的 TypeError
+                        df_save = df_save.astype(str)
+                        
                         save_data(df_save, manifest_sheet)
                     else:
-                        # 💥 關鍵修復：單據已經被刪光了！建立帶有標準標頭的空 DataFrame，防止 save_data 噴出 TypeError
+                        # 💥 關鍵修復：單據已經被刪光了！建立帶有標準標頭的空 DataFrame
                         columns_template = [
                             "order_no", "vendor", "expected_delive", "operator", "jan_code", 
                             "name_ja", "expected_count", "actual_count", "expected_cases", 
@@ -1079,8 +1082,12 @@ if is_tab1_active:
                         ]
                         df_empty = pd.DataFrame(columns=columns_template)
                         
+                        # 💥 【保險起見】空的 DataFrame 也同樣強制轉成字串結構
+                        df_empty = df_empty.astype(str)
+                        
                         # 呼叫存檔，這會清空 Google Sheets 的內容，但保留正確的試算表標頭結構
                         save_data(df_empty, manifest_sheet)
+
                         
                     st.rerun()
 
