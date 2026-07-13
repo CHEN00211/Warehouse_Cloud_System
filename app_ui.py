@@ -1302,22 +1302,22 @@ if is_tab2_active:
                     # ==================== 步驟 3：表單底部按鈕 (已跳出 for 迴圈外部) ====================
                     col_form_btn1, col_form_btn2 = st.columns(2)
                     with col_form_btn1:
-                        submit_btn = st.form_submit_button(t["submit"], use_container_width=True)
+                        # 🛠️ 為提交按鈕加上唯一 Key 後綴，避免迴圈重複報錯
+                        submit_btn = st.form_submit_button(
+                            t["submit"], 
+                            use_container_width=True,
+                            key=f"submit_btn_{selected_order}_{current_jan}" # 👈 加上專屬 Key
+                        )
                     with col_form_btn2:
-                        if st.form_submit_button("+ 增加期限與批次欄位", use_container_width=True):
+                        # 🛠️ 為增加欄位按鈕加上唯一 Key 後綴，避免迴圈重複報錯
+                        if st.form_submit_button(
+                            "+ 增加期限與批次欄位", 
+                            use_container_width=True,
+                            key=f"add_field_btn_{selected_order}_{current_jan}" # 👈 加上專屬 Key
+                        ):
                             st.session_state[row_count_key] += 1
                             st.rerun()
 
-
-
-                    # ==================== 步驟 3：表單底部按鈕 (已跳出 for 迴圈外部) ====================
-                    col_form_btn1, col_form_btn2 = st.columns(2)
-                    with col_form_btn1:
-                        submit_btn = st.form_submit_button(t["submit"], use_container_width=True)
-                    with col_form_btn2:
-                        if st.form_submit_button("+ 增加期限與批次欄位", use_container_width=True):
-                            st.session_state[row_count_key] += 1
-                            st.rerun()
 
                     # ==========================================
                     # PART 4-2 (下): 資料校驗與資料庫持久化回寫 (修復 Google Sheet 欄位未增加問題)
