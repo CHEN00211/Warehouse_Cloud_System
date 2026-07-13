@@ -1208,7 +1208,12 @@ if is_tab2_active:
                 if row_count_key not in st.session_state:
                     st.session_state[row_count_key] = 1
 
-                # 💾 1. 精準抽取 CSV/資料庫的商品原始規格
+                # 🧼 自動清空核心：表單重置計數器（如果不存在就初始化為 0）
+                clear_counter_key = f"dlg_clear_counter_{selected_order}_{current_jan}"
+                if clear_counter_key not in st.session_state:
+                    st.session_state[clear_counter_key] = 0
+
+                # 💾 精準抽取 CSV/資料庫的商品原始規格
                 target_jan = st.session_state.get("pda_current_verified_jan", "")
                 db_item = current_manifest_pool.get(target_jan, {})
                 db_expected_cases = db_item.get("expected_cases", 10)  
@@ -1218,115 +1223,98 @@ if is_tab2_active:
                 correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 180
                 correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 2
 
-                # 🛠️ 核心自動相乘聯動回呼函式 (Callback)
-                def update_actual_quantity(box_key, per_val, act_key):
-                    """當箱數發生改變時，自動即時計算並更新驗收數量到 session_state"""
-                    current_box = st.session_state.get(box_key, 0)
-                    st.session_state[act_key] = int(current_box * per_val)
-
                 # 建立點貨資料收集容器
                 collected_rows_data = []
 
-                # ==================== 動態迴圈：獨立渲染每一組項目組合 ====================
-                for idx in range(st.session_state[row_count_key]):
-                    st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
+                # 📦 使用 st.form 包裹整個輸入區與確認按鈕，並綁定一個動態的 form_key
+                current_form_id = st.session_state[clear_counter_key]
+                form_key = f"pda_entry_form_{selected_order}_{current_jan}_{current_form_id}"
+
+                with st.form(key=form_key, clear_on_submit=False):
                     
-                    # 為每一個輸入框建立全宇宙唯一的獨立狀態 Key
-                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}"
-                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}"
-                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
-
-                    # 箱入數永遠鎖定不變
-                    live_per_val = correct_per_case 
-
-                    # 🔄 初始化機制：初次加載時，如果驗收數量還不在記憶體裡，先幫它算好預設值
-                    if act_widget_key not in st.session_state:
-                        initial_box = correct_cases if idx == 0 else 0
-                        st.session_state[act_widget_key] = int(initial_box * live_per_val)
-
-                    # ==================== UI 欄位排版渲染 (精準配比確保完美水平對齊) ====================
-                    # [箱入數, 箱數, 驗收數量, Lot批次, 有效期限] -> 按您原始畫面的順序與比例
-                    col_per, col_box, col_act, col_lot, col_exp = st.columns([1.0, 1.0, 1.2, 1.8, 1.8])
-                    
-                    with col_per:
-                        # 欄位 1：箱入數（預設反灰鎖定）
-                        r_per_case = st.number_input(
-                            "箱入數" if st.session_state.lang == "zh" else "入数", 
-                            min_value=0, 
-                            value=int(live_per_val), 
-                            step=1,
-                            key=per_widget_key, 
-                            disabled=True 
-                        )
-                    with col_box:
-                        # 欄位 2：箱數（變動時觸發自動相乘）
-                        r_cases = st.number_input(
-                            "箱數" if st.session_state.lang == "zh" else "箱数", 
-                            min_value=0, 
-                            value=correct_cases if idx == 0 else 0, 
-                            step=1, 
-                            key=box_widget_key,
-                            on_change=update_actual_quantity,
-                            args=(box_widget_key, live_per_val, act_widget_key)
-                        )
-                    with col_act:
-                        # 欄位 3：驗收數量（由狀態機接管，達成 0 毫秒即時同步更新）
-                        actual_label = t["actual"] if "actual" in t else ("驗收數量" if st.session_state.lang == "zh" else "検収数量")
-                        r_actual = st.number_input(
-                            actual_label, 
-                            min_value=0, 
-                            step=1,
-                            key=act_widget_key
-                        )
-                    with col_lot:
-                        # 欄位 4：Lot 批次
-                        lot_field_label = t.get("lot_no_label", "Lot 批次" if st.session_state.lang == "zh" else "Lot ロット")
-                        r_lot = st.text_input(
-                            lot_field_label, 
-                            value="", 
-                            key=f"dlg_lot_{selected_order}_{current_jan}_{idx}"
-                        ) 
-                    with col_exp:
-                        # 欄位 5：有效期限
-                        expiry_label = t["expiry"] if "expiry" in t else ("有效期限" if st.session_state.lang == "zh" else "有効期限")
-                        r_expiry = st.text_input(
-                            expiry_label, 
-                            value="", 
-                            placeholder="2026/1/1", 
-                            key=f"dlg_exp_{selected_order}_{current_jan}_{idx}"
-                        ) 
-
-                    # 封裝收集本組的數據
-                    collected_rows_data.append({
-                        "actual": r_actual, 
-                        "lot": r_lot, 
-                        "expiry": r_expiry,
-                        "cases": r_cases,
-                        "pcs_per_case": r_per_case
-                    })
-                    st.markdown("---")
-
-                # ==================== 對話框專屬：底部控制按鈕區 ====================
-                # 🛠️ 調整比例：改為 [2.5, 2.5] 完全平分，讓兩個按鈕大小一致、更加平均好看！
-                # 如果希望左邊按鈕稍微寬一點點，也可以嘗試改用 [2.7, 2.3]
-                col_btn1, col_btn2 = st.columns([2.5, 2.5])
-                with col_btn1:
-                    # 🛠️ 核心修復：維持變數賦值，解決後續邏輯的 NameError
-                    submit_btn = st.button(
-                        t["submit"] if "submit" in t else "確認提交", 
-                        use_container_width=True, 
-                        type="primary", 
-                        key=f"dlg_sub_btn_{selected_order}_{current_jan}"
-                    )
-                    if submit_btn:
-                        # 💡 您原本點擊確認後處理存檔、寫入資料庫的邏輯程式碼會在這裡執行
-                        pass
+                    # ==================== 動態迴圈：獨立渲染每一組項目組合 ====================
+                    for idx in range(st.session_state[row_count_key]):
+                        st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                         
-                with col_btn2:
-                    # 點擊此按鈕，組數自動 +1 並即時強制重整重新繪製出乾淨的新一列組合
-                    if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}"):
-                        st.session_state[row_count_key] += 1
-                        st.rerun()
+                        # 唯一的狀態 Key (不需要再手動去 del 或重置它們)
+                        box_widget_key = f"dlg_box_{selected_order}_{current_jan}_{idx}_{current_form_id}"
+                        per_widget_key = f"dlg_per_{selected_order}_{current_jan}_{idx}_{current_form_id}"
+                        act_widget_key = f"dlg_act_{selected_order}_{current_jan}_{idx}_{current_form_id}"
+
+                        # 🛠️ 回歸最直覺的即時相乘：直接從網頁即時抓取「箱數」，即時計算
+                        live_box_val = st.session_state.get(box_widget_key, correct_cases if idx == 0 else 0)
+                        live_per_val = correct_per_case 
+                        live_calculated_total = int(live_box_val * live_per_val)
+
+                        # ==================== UI 欄位排版渲染 (完美水平對齊比例) ====================
+                        col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1.0, 1.0, 1.2, 1.8, 1.8])
+                        
+                        with col_per:
+                            r_per_case = st.number_input(
+                                "箱入數" if st.session_state.lang == "zh" else "入数", 
+                                min_value=0, 
+                                value=int(live_per_val), 
+                                step=1,
+                                key=per_widget_key, 
+                                disabled=True 
+                            )
+                        with col_box:
+                            r_cases = st.number_input(
+                                "箱數" if st.session_state.lang == "zh" else "箱数", 
+                                min_value=0, 
+                                value=int(live_box_val), 
+                                step=1, 
+                                key=box_widget_key
+                            )
+                        with col_field1:
+                            # 這裡回復成你最早的版本：直接帶入 live_calculated_total，按 + - 就會即時更新！
+                            r_actual = st.number_input(
+                                t["actual"], 
+                                min_value=0, 
+                                value=live_calculated_total, 
+                                step=1,
+                                key=act_widget_key
+                            )
+                        with col_field2:
+                            lot_field_label = t.get("lot_no_label", "Lot 批次")
+                            r_lot = st.text_input(lot_field_label, value="", key=f"dlg_lot_{selected_order}_{current_jan}_{idx}_{current_form_id}") 
+                        with col_field3:
+                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"dlg_exp_{selected_order}_{current_jan}_{idx}_{current_form_id}") 
+
+                        # 封裝收集本組的數據
+                        collected_rows_data.append({
+                            "actual": r_actual, 
+                            "lot": r_lot, 
+                            "expiry": r_expiry,
+                            "cases": r_cases,
+                            "pcs_per_case": r_per_case
+                        })
+                        st.markdown("---")
+
+                    # ==================== 對話框專屬：底部控制按鈕區 ====================
+                    # 大小平均的 1:1 比例
+                    col_btn1, col_btn2 = st.columns([2.5, 2.5])
+                    with col_btn1:
+                        # st.form 內部的送出按鈕必須是 form_submit_button
+                        submit_btn = st.form_submit_button(
+                            t["submit"], 
+                            use_container_width=True, 
+                            type="primary"
+                        )
+                        if submit_btn:
+                            # 💡 1. 這裡放你原始的存檔、寫入資料庫邏輯（此時 collected_rows_data 已收好資料）
+                            pass
+                            
+                            # 🧼 2. 存檔成功後，直接讓計數器 +1 換掉表單 ID，所有欄位瞬間乾淨重置！
+                            st.session_state[clear_counter_key] += 1
+                            st.session_state[row_count_key] = 1 # 回復成只有 1 行
+                            st.rerun()
+                            
+                    with col_btn2:
+                        # 由於在 st.form 中按普通按鈕會觸發整頁重新整理，這裡改為傳統 button 即可正常運作
+                        if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}_{current_form_id}"):
+                            st.session_state[row_count_key] += 1
+                            st.rerun()
 
 
 
