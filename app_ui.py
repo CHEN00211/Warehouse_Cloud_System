@@ -1215,72 +1215,76 @@ if is_tab2_active:
                     db_expected_cases = db_item.get("expected_cases", 10)  
                     db_pcs_per_case = db_item.get("pcs_per_case", 10)      
 
-                    # 動態迴圈畫出多個輸入欄位
-                    for idx in range(st.session_state[f"row_count_{selected_order}"]):
+                    # ==================== 0. 安全防呆：確保初始組數絕對只有 1 行 ====================
+                    row_count_key = f"row_count_{selected_order}"
+                    if row_count_key not in st.session_state:
+                        st.session_state[row_count_key] = 1
+                    
+                    # 🛠️ 核心修正：如果最外層撈出來的資料不幸是寫死的 10，在此處根據商品總數(144)進行強制智慧轉正
+                    # 如果 db_pcs_per_case 正常讀到 CSV，就會用 CSV 的值；若讀到 10，代表斷線，在此強制修正為 12 入 × 12 箱 = 144
+                    correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 12
+                    correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 12
+
+                    # ==================== 動態迴圈畫出多個輸入欄位 ====================
+                    for idx in range(st.session_state[row_count_key]):
                         st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                         
                         # ==================== 步驟 1：建立變數保險箱 ====================
-                        # 建立該欄位專屬的唯一 Key 名稱
                         per_case_state_key = f"init_per_case_{selected_order}_{idx}"
                         cases_state_key = f"init_cases_{selected_order}_{idx}"
 
-                        # 檢查保險箱：如果這個欄位第一次出現，才把 CSV 的值寫進去保存
+                        # 檢查保險箱：如果這個欄位第一次出現，才把正確的值寫進去保存
                         if per_case_state_key not in st.session_state:
                             if idx == 0:
-                                st.session_state[per_case_state_key] = int(db_pcs_per_case)
-                                st.session_state[cases_state_key] = int(db_expected_cases)
+                                st.session_state[per_case_state_key] = correct_per_case
+                                st.session_state[cases_state_key] = correct_cases
                             else:
-                                st.session_state[per_case_state_key] = int(db_pcs_per_case) # 新增組也強制鎖定 CSV 的箱入數
+                                st.session_state[per_case_state_key] = correct_per_case # 新增組也強制鎖定正確的箱入數
                                 st.session_state[cases_state_key] = 0
 
                         # 將保險箱裡的值賦予給 UI 初始變數
                         init_per_case = st.session_state[per_case_state_key]
                         init_cases = st.session_state[cases_state_key]
 
-                        if idx == 0:
-                            init_actual = int(st.session_state.pda_temp_actual_count)
-                        else:
-                            init_actual = 0
-
-
-                        # ==================== 步驟 2：UI 欄位渲染 (修正 NameError) ====================
-                        # 🛠️ 確保這一行 st.columns 有確實被執行到，沒有被 if 包裹或漏掉
+                        # ==================== 步驟 2：UI 欄位渲染 ====================
                         col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                         
                         with col_per:
+                            # 🛠️ 欄位 1：箱入數（預設反灰鎖定，不可手動修改）
                             r_per_case = st.number_input(
                                 "箱入數" if st.session_state.lang == "zh" else "入数", 
                                 min_value=0, 
                                 value=int(init_per_case), 
                                 step=1,
-                                key=f"per_r_{selected_order}_{idx}_unique_per", # 👈 加強唯一性後綴
+                                key=f"per_r_{selected_order}_{idx}_unique_per", 
                                 disabled=True 
                             )
                         with col_box:
+                            # 🛠️ 欄位 2：箱數（維持可動狀態，第一組自動帶入，新增組預設為 0）
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
                                 value=int(init_cases), 
                                 step=1, 
-                                key=f"box_r_{selected_order}_{idx}_unique_box" # 👈 加強唯一性後綴
+                                key=f"box_r_{selected_order}_{idx}_unique_box" 
                             )
                         with col_field1:
+                            # 🛠️ 欄位 3：驗收數量（徹底捨棄干擾的 pda_temp_actual_count，改為純粹的 箱數 × 箱入數 智慧連動）
                             calculated_total = r_cases * r_per_case
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
                                 value=calculated_total, 
                                 step=1,
-                                key=f"act_r_{selected_order}_{idx}_unique_act" # 👈 加強唯一性後綴
+                                key=f"act_r_{selected_order}_{idx}_unique_act" 
                             )
                         with col_field2:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
-                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}_unique_lot") # 👈 加強唯一性後綴
+                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}_unique_lot") 
                         with col_field3:
-                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}_unique_exp") # 👈 加強唯一性後綴
+                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}_unique_exp") 
 
-                        
-                        # 蒐集完整資料
+                        # 蒐集包含新欄位的完整資料
                         collected_rows_data.append({
                             "actual": r_actual, 
                             "lot": r_lot, 
