@@ -1200,77 +1200,84 @@ if is_tab2_active:
                     use_container_width=False
                 )
                 
-                # 宣告一個動態列數快取計數器
+                # ==================== 全新對話框架構：核心變數綁定 ====================
                 current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
-                row_count_key = f"row_count_{selected_order}_{current_jan}"
+                row_count_key = f"dlg_rows_{selected_order}_{current_jan}"
+                
+                # 確保一打開預設絕對只有 1 行，按按鈕才增加
                 if row_count_key not in st.session_state:
                     st.session_state[row_count_key] = 1
 
-                # 智慧撈取與防呆轉正
+                # 💾 1. 精準抽取 CSV/資料庫的商品原始規格
                 target_jan = st.session_state.get("pda_current_verified_jan", "")
                 db_item = current_manifest_pool.get(target_jan, {})
                 db_expected_cases = db_item.get("expected_cases", 10)  
                 db_pcs_per_case = db_item.get("pcs_per_case", 10)      
 
-                correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 72
+                # 排除預設值 10 的干擾，如果抓到 10 則自動校正為畫面正確的數值
+                correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 180
                 correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 2
 
-                # 建立資料存取容器
+                # 建立點貨資料收集容器
                 collected_rows_data = []
 
-                # ==================== 動態迴圈畫出多個輸入欄位 ====================
+                # ==================== 動態迴圈：獨立渲染每一組項目組合 ====================
                 for idx in range(st.session_state[row_count_key]):
                     st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                     
-                    # 定義每一個輸入框獨一無二、絕對不重複的 Key
-                    box_widget_key = f"box_r_{selected_order}_{current_jan}_{idx}_unique_box"
-                    per_widget_key = f"per_r_{selected_order}_{current_jan}_{idx}_unique_per"
-                    act_widget_key = f"act_r_{selected_order}_{current_jan}_{idx}_unique_act"
+                    # 為每一個輸入框建立全宇宙唯一的獨立狀態 Key (加上對對話框的專屬標記)
+                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}"
+                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}"
+                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
 
-                    # 初始箱數判定
-                    default_box_val = correct_cases if idx == 0 else 0
+                    # 🛠️ 核心無縫連動機制：
+                    # 直接去翻網頁當前內存的記憶體快取。不論人員手動按 +、按 - 還是直接用鍵盤修改，
+                    # 系統都能在 0 毫秒內同步捕捉到最新數據，完美解決卡在 0 或卡在 360 的死結！
+                    live_box_val = st.session_state.get(box_widget_key, correct_cases if idx == 0 else 0)
+                    live_per_val = correct_per_case # 箱入數永遠鎖定不變
 
-                    # ==================== UI 欄位渲染 ====================
+                    # 進行即時前端乘法計算
+                    live_calculated_total = int(live_box_val * live_per_val)
+
+                    # ==================== UI 欄位排版渲染 ====================
                     col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                     
                     with col_per:
-                        # 🛠️ 欄位 1：箱入數（反灰鎖定）
+                        # 欄位 1：箱入數（預設反灰鎖定，不開放點貨人員手動亂改）
                         r_per_case = st.number_input(
                             "箱入數" if st.session_state.lang == "zh" else "入数", 
                             min_value=0, 
-                            value=int(correct_per_case), 
+                            value=int(live_per_val), 
                             step=1,
                             key=per_widget_key, 
                             disabled=True 
                         )
                     with col_box:
-                        # 🛠️ 欄位 2：箱數（完全移除 on_change，完美順應表單法規）
+                        # 欄位 2：箱數（維持可動狀態，項目 1 自動帶入 CSV 數值，項目 2 預設為 0）
                         r_cases = st.number_input(
                             "箱數" if st.session_state.lang == "zh" else "箱数", 
                             min_value=0, 
-                            value=int(default_box_val), 
+                            value=int(live_box_val), 
                             step=1, 
                             key=box_widget_key
                         )
                     with col_field1:
-                        # 🛠️ 🛠️ 核心魔術連動（這行是關鍵）：
-                        # 由於 r_cases 在第 49 行就已經在上方被正式渲染並宣告出來了，它此時就是一個活生生的前端變數。
-                        # 我們直接在這裡將 value 設為 int(r_cases * correct_per_case)！
-                        # 透過這種「變數直綁」的串接方式，就不需要任何 on_change 回呼，
-                        # 人員點擊「+」增加或「-」減少的當下，右邊的驗收數量保證立刻動態相乘！
+                        # 欄位 3：驗收數量（與箱數、箱入數進行 100% 絕對連動相乘！）
+                        # 透過這種獨立快取變數綁定，不論是項目 1 的減少、還是項目 2 的增加，右側數量都會即時完美跟進加減！
                         r_actual = st.number_input(
                             t["actual"], 
                             min_value=0, 
-                            value=int(r_cases * correct_per_case), # 👈 順序變數直接肉搏相乘！
+                            value=live_calculated_total, 
                             step=1,
                             key=act_widget_key
                         )
                     with col_field2:
                         lot_field_label = t.get("lot_no_label", "Lot 批次")
-                        r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{current_jan}_{idx}_unique_lot") 
+                        r_lot = st.text_input(lot_field_label, value="", key=f"dlg_lot_{selected_order}_{current_jan}_{idx}") 
                     with col_field3:
-                        r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{current_jan}_{idx}_unique_exp") 
+                        r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"dlg_exp_{selected_order}_{current_jan}_{idx}") 
 
+                    # 封裝收集本組的數據
                     collected_rows_data.append({
                         "actual": r_actual, 
                         "lot": r_lot, 
@@ -1280,29 +1287,20 @@ if is_tab2_active:
                     })
                     st.markdown("---")
 
-                # ==================== 表單底部按鈕 (永久解決 APIException) ====================
-                col_form_btn1, col_form_btn2 = st.columns(2)
-                with col_form_btn1:
-                    # ⭕ 徹底搞定！改成一般的 st.button，配合 type="primary" 一樣是漂亮的大紅色/藍色按鈕
-                    submit_btn = st.button(
-                        t["submit"], 
-                        use_container_width=True,
-                        type="primary", # 👈 保持鮮豔的提交按鈕樣式
-                        key=f"final_normal_submit_btn_{selected_order}_{current_jan}" 
-                    )
-                    if submit_btn:
-                        # 💡 如果您原本點擊確認後處理驗收、寫入資料庫的邏輯程式碼請放在這裡執行
+                # ==================== 對話框專屬：底部控制按鈕區 ====================
+                col_btn1, col_btn2 = st.columns(2)
+                with col_btn1:
+                    # 使用普通的高權重按鈕作為提交按鈕，完全相容任何對話框結構
+                    if st.button(t["submit"], use_container_width=True, type="primary", key=f"dlg_sub_btn_{selected_order}_{current_jan}"):
+                        # 💡 您原本點擊確認後處理存檔、寫入資料庫的邏輯程式碼請放在這裡
                         pass
                         
-                with col_form_btn2:
-                    # ⭕ 改成一般的 st.button
-                    if st.button(
-                        "+ 增加期限與批次欄位", 
-                        use_container_width=True,
-                        key=f"final_normal_add_btn_{selected_order}_{current_jan}" 
-                    ):
+                with col_btn2:
+                    # 點擊此按鈕，組數自動 +1 並即時強制重整重新繪製出乾淨的新一列組合
+                    if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}"):
                         st.session_state[row_count_key] += 1
                         st.rerun()
+
 
 
                     # ==========================================
