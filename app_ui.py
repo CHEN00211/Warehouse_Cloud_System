@@ -1041,6 +1041,7 @@ if is_tab1_active:
             if st.button(t["del_btn_label"], type="primary", use_container_width=True):
                 if target_to_delete in db["manifest_by_order"]:
                     del db["manifest_by_order"][target_to_delete]
+                    
                     # 💡 核心修正：將刪除後的嵌套字典結構攤平成標準數據列
                     manifest_sheet = get_google_sheet("Manifest")
                     flattened_rows = []
@@ -1048,7 +1049,7 @@ if is_tab1_active:
                         info = doc.get("info", {})
                         for jan_code, item in doc.get("items", {}).items():
                             flattened_rows.append({
-                                "order_no": o_no,
+                                "order_no": str(o_no).strip().zfill(7), # 順便加強單號補零防護，確保回寫不縮水
                                 "vendor": info.get("vendor", "-"),
                                 "expected_delive": info.get("expected_delivery", "-"),
                                 "operator": info.get("operator", "-"),
@@ -1062,11 +1063,27 @@ if is_tab1_active:
                                 "status": item.get("status", "未點收"),
                                 "archived_order": str(doc.get("archived_order", False))
                             })
-                    save_data(pd.DataFrame(flattened_rows), manifest_sheet)
+                    
+                    # 🛠️ 核心防崩潰機制：檢查攤平後是否還有資料
+                    if flattened_rows:
+                        # 還有其他單據，正常進行型態轉換與存檔
+                        df_save = pd.DataFrame(flattened_rows)
+                        df_save["order_no"] = df_save["order_no"].astype(str).str.strip().str.zfill(7)
+                        save_data(df_save, manifest_sheet)
+                    else:
+                        # 💥 關鍵修復：單據已經被刪光了！建立帶有標準標頭的空 DataFrame，防止 save_data 噴出 TypeError
+                        columns_template = [
+                            "order_no", "vendor", "expected_delive", "operator", "jan_code", 
+                            "name_ja", "expected_count", "actual_count", "expected_cases", 
+                            "pcs_per_case", "actual_cases", "status", "archived_order"
+                        ]
+                        df_empty = pd.DataFrame(columns=columns_template)
+                        
+                        # 呼叫存檔，這會清空 Google Sheets 的內容，但保留正確的試算表標頭結構
+                        save_data(df_empty, manifest_sheet)
+                        
                     st.rerun()
 
-    else:
-        st.text(t["no_manifest_msg"])
 
 
 # ==========================================
