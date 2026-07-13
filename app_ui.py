@@ -1215,15 +1215,18 @@ if is_tab2_active:
                     db_expected_cases = db_item.get("expected_cases", 10)  
                     db_pcs_per_case = db_item.get("pcs_per_case", 10)      
 
-                    # ==================== 0. 安全防呆：確保初始組數絕對只有 1 行 ====================
-                    row_count_key = f"row_count_{selected_order}"
+                    # 💡 請確認您系統中代表該商品條碼的變數名稱（例如：db_jan_code 或 row['jan_code']）
+                    # 這裡假設您的條碼變數叫做 db_jan_code，請根據實際情況微調變數名
+                    current_jan = str(db_jan_code) 
+
+                    # ==================== 0. 安全防呆：將條碼綁進組數 Key ====================
+                    # 這樣換條碼時，組數會自動重置為 1 行
+                    row_count_key = f"row_count_{selected_order}_{current_jan}"
                     
-                    # 如果該單據的箱入數保險箱還沒建立，代表是剛切換或剛上傳的商品，強制重置組數為 1
-                    if f"init_per_case_{selected_order}_0" not in st.session_state:
+                    if f"init_per_case_{selected_order}_{current_jan}_0" not in st.session_state:
                         st.session_state[row_count_key] = 1
 
-                    # 🛠️ 核心修正：如果最外層撈出來的資料是錯誤的 10，在此處強制智慧轉正
-                    # 依據您提供的真實 CSV，此商品（JAN末碼285）正確規格應該是 箱入數 18、預計箱數 3
+                    # 🛠️ 核心修正：動態讀取當前商品的正確規格
                     correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 18
                     correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 3
 
@@ -1231,62 +1234,59 @@ if is_tab2_active:
                     for idx in range(st.session_state[row_count_key]):
                         st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                         
-                        # ==================== 步驟 1：建立變數保險箱 ====================
-                        per_case_state_key = f"init_per_case_{selected_order}_{idx}"
-                        cases_state_key = f"init_cases_{selected_order}_{idx}"
+                        # ==================== 步驟 1：建立變數保險箱 (加上 current_jan 條碼防污染) ====================
+                        per_case_state_key = f"init_per_case_{selected_order}_{current_jan}_{idx}"
+                        cases_state_key = f"init_cases_{selected_order}_{current_jan}_{idx}"
 
-                        # 檢查保險箱：如果這個欄位第一次出現，才把正確的值寫進去保存
+                        # 檢查保險箱：當換條碼時，這裡會因為包含新條碼而重新初始化，完美帶入新商品的正確數值！
                         if per_case_state_key not in st.session_state:
                             if idx == 0:
                                 st.session_state[per_case_state_key] = correct_per_case
                                 st.session_state[cases_state_key] = correct_cases
                             else:
-                                st.session_state[per_case_state_key] = correct_per_case # 新增組也強制鎖定正確的箱入數
+                                st.session_state[per_case_state_key] = correct_per_case 
                                 st.session_state[cases_state_key] = 0
 
-                        # 將保險箱裡的值賦予給 UI 初始變數
+                        # 讀取保險箱內安全、不被覆蓋的值
                         init_per_case = st.session_state[per_case_state_key]
                         init_cases = st.session_state[cases_state_key]
 
-                        # ==================== 步驟 2：UI 欄位渲染 ====================
+                        # ==================== 步驟 2：UI 欄位渲染 (key 也要同步加上 current_jan) ====================
                         col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                         
                         with col_per:
-                            # 🛠️ 欄位 1：箱入數（預設反灰鎖定，不可手動修改）
                             r_per_case = st.number_input(
                                 "箱入數" if st.session_state.lang == "zh" else "入数", 
                                 min_value=0, 
                                 value=int(init_per_case), 
                                 step=1,
-                                key=f"per_r_{selected_order}_{idx}_unique_per", 
+                                key=f"per_r_{selected_order}_{current_jan}_{idx}_unique_per", # 👈 加上條碼
                                 disabled=True 
                             )
                         with col_box:
-                            # 🛠️ 欄位 2：箱數（維持可動狀態，第一組自動帶入，新增組預設為 0）
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
                                 value=int(init_cases), 
                                 step=1, 
-                                key=f"box_r_{selected_order}_{idx}_unique_box" 
+                                key=f"box_r_{selected_order}_{current_jan}_{idx}_unique_box" # 👈 加上條碼
                             )
                         with col_field1:
-                            # 🛠️ 欄位 3：驗收數量（由箱數 × 箱入數 智慧動態連動計算）
                             calculated_total = r_cases * r_per_case
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
                                 value=calculated_total, 
                                 step=1,
-                                key=f"act_r_{selected_order}_{idx}_unique_act" 
+                                key=f"act_r_{selected_order}_{current_jan}_{idx}_unique_act" # 👈 加上條碼
                             )
                         with col_field2:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
-                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}_unique_lot") 
+                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{current_jan}_{idx}_unique_lot") # 👈 加上條碼
                         with col_field3:
-                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}_unique_exp") 
+                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{current_jan}_{idx}_unique_exp") # 👈 加上條碼
 
-                        # 蒐集包含新欄位的完整資料（只留一份，避免重複收集）
+                        # 蒐集包含新欄位的完整資料
                         collected_rows_data.append({
                             "actual": r_actual, 
                             "lot": r_lot, 
@@ -1295,6 +1295,7 @@ if is_tab2_active:
                             "pcs_per_case": r_per_case
                         })
                         st.markdown("---")
+
 
                     # ==================== 步驟 3：表單底部按鈕 (已跳出 for 迴圈外部) ====================
                     col_form_btn1, col_form_btn2 = st.columns(2)
