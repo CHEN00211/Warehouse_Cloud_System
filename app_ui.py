@@ -1219,23 +1219,84 @@ if is_tab2_active:
                     for idx in range(st.session_state[f"row_count_{selected_order}"]):
                         st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                         
+                        # ==================== 步驟 1：建立變數保險箱 ====================
+                        # 建立該欄位專屬的唯一 Key 名稱
+                        per_case_state_key = f"init_per_case_{selected_order}_{idx}"
+                        cases_state_key = f"init_cases_{selected_order}_{idx}"
+
+                        # 檢查保險箱：如果這個欄位第一次出現，才把 CSV 的值寫進去保存
+                        if per_case_state_key not in st.session_state:
+                            if idx == 0:
+                                st.session_state[per_case_state_key] = int(db_pcs_per_case)
+                                st.session_state[cases_state_key] = int(db_expected_cases)
+                            else:
+                                st.session_state[per_case_state_key] = int(db_pcs_per_case) # 新增組也強制鎖定 CSV 的箱入數
+                                st.session_state[cases_state_key] = 0
+
+                        # 將保險箱裡的值賦予給 UI 初始變數
+                        init_per_case = st.session_state[per_case_state_key]
+                        init_cases = st.session_state[cases_state_key]
+
+                        if idx == 0:
+                            init_actual = int(st.session_state.pda_temp_actual_count)
+                        else:
+                            init_actual = 0
+
+
+                        # ==================== 步驟 2：UI 欄位渲染 (修正 NameError) ====================
+                        # 🛠️ 確保這一行 st.columns 有確實被執行到，沒有被 if 包裹或漏掉
+                        col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
+                        
                         with col_per:
                             r_per_case = st.number_input(
                                 "箱入數" if st.session_state.lang == "zh" else "入数", 
                                 min_value=0, 
-                                value=int(init_per_case), # 👈 這裡會成功吃到步驟 1 保險箱裡的正確值
+                                value=int(init_per_case), 
                                 step=1,
-                                key=f"per_r_{selected_order}_{idx}", # 👈 確保 key 有加上選單與索引識別
-                                disabled=True 
+                                key=f"per_r_{selected_order}_{idx}",
+                                disabled=True # 👈 鎖定反灰
                             )
+                            
                         with col_box:
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
-                                value=int(init_cases), # 👈 這裡也會成功吃到步驟 1 的正確初始箱數
+                                value=int(init_cases), 
                                 step=1, 
                                 key=f"box_r_{selected_order}_{idx}"
                             )
+                            
+                        with col_field1:
+                            calculated_total = r_cases * r_per_case
+                            r_actual = st.number_input(
+                                t["actual"], 
+                                min_value=0, 
+                                value=calculated_total, 
+                                step=1,
+                                key=f"act_r_{selected_order}_{idx}"
+                            )
+                            
+                        with col_field2:
+                            lot_field_label = t.get("lot_no_label", "Lot 批次")
+                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{idx}")
+                            
+                        with col_field3:
+                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{idx}")
+                        
+                        # 蒐集完整資料
+                        collected_rows_data.append({
+                            "actual": r_actual, 
+                            "lot": r_lot, 
+                            "expiry": r_expiry,
+                            "cases": r_cases,
+                            "pcs_per_case": r_per_case
+                        })
+                        st.markdown("---")
+
+# ==================== 步驟 3：修正 Missing Submit Button ====================
+# 💡 請在您整段表單迴圈的「最外層底端」（跳出迴圈後），補上這行 Streamlit 規定的送出按鈕
+# submitted = st.form_submit_button("確認送出驗收") 
+
 
 
 
