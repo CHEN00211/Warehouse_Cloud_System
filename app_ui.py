@@ -1220,6 +1220,9 @@ if is_tab2_active:
                     current_jan = str(db_jan_code) 
 
                     # ==================== 0. 安全防呆：將條碼綁進組數 Key ====================
+                    # 精準讀取您系統暫存的條碼
+                    current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT")) 
+
                     # 這樣換條碼時，組數會自動重置為 1 行
                     row_count_key = f"row_count_{selected_order}_{current_jan}"
                     
@@ -1251,7 +1254,7 @@ if is_tab2_active:
                         init_per_case = st.session_state[per_case_state_key]
                         init_cases = st.session_state[cases_state_key]
 
-                        # ==================== 步驟 2：UI 欄位渲染 (key 也要同步加上 current_jan) ====================
+                        # ==================== 步驟 2：UI 欄位渲染 ====================
                         col_per, col_box, col_field1, col_field2, col_field3 = st.columns([1, 1, 1, 1.8, 1.8])
                         
                         with col_per:
@@ -1260,7 +1263,7 @@ if is_tab2_active:
                                 min_value=0, 
                                 value=int(init_per_case), 
                                 step=1,
-                                key=f"per_r_{selected_order}_{current_jan}_{idx}_unique_per", # 👈 加上條碼
+                                key=f"per_r_{selected_order}_{current_jan}_{idx}_unique_per", 
                                 disabled=True 
                             )
                         with col_box:
@@ -1269,7 +1272,7 @@ if is_tab2_active:
                                 min_value=0, 
                                 value=int(init_cases), 
                                 step=1, 
-                                key=f"box_r_{selected_order}_{current_jan}_{idx}_unique_box" # 👈 加上條碼
+                                key=f"box_r_{selected_order}_{current_jan}_{idx}_unique_box" 
                             )
                         with col_field1:
                             calculated_total = r_cases * r_per_case
@@ -1278,13 +1281,13 @@ if is_tab2_active:
                                 min_value=0, 
                                 value=calculated_total, 
                                 step=1,
-                                key=f"act_r_{selected_order}_{current_jan}_{idx}_unique_act" # 👈 加上條碼
+                                key=f"act_r_{selected_order}_{current_jan}_{idx}_unique_act" 
                             )
                         with col_field2:
                             lot_field_label = t.get("lot_no_label", "Lot 批次")
-                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{current_jan}_{idx}_unique_lot") # 👈 加上條碼
+                            r_lot = st.text_input(lot_field_label, value="", key=f"lot_r_{selected_order}_{current_jan}_{idx}_unique_lot") 
                         with col_field3:
-                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{current_jan}_{idx}_unique_exp") # 👈 加上條碼
+                            r_expiry = st.text_input(t["expiry"], value="", placeholder="2026/1/1", key=f"exp_r_{selected_order}_{current_jan}_{idx}_unique_exp") 
 
                         # 蒐集包含新欄位的完整資料
                         collected_rows_data.append({
@@ -1295,6 +1298,16 @@ if is_tab2_active:
                             "pcs_per_case": r_per_case
                         })
                         st.markdown("---")
+
+                    # ==================== 步驟 3：表單底部按鈕 (已跳出 for 迴圈外部) ====================
+                    col_form_btn1, col_form_btn2 = st.columns(2)
+                    with col_form_btn1:
+                        submit_btn = st.form_submit_button(t["submit"], use_container_width=True)
+                    with col_form_btn2:
+                        if st.form_submit_button("+ 增加期限與批次欄位", use_container_width=True):
+                            st.session_state[row_count_key] += 1
+                            st.rerun()
+
 
 
                     # ==================== 步驟 3：表單底部按鈕 (已跳出 for 迴圈外部) ====================
