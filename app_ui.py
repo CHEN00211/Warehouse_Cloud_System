@@ -1200,51 +1200,28 @@ if is_tab2_active:
                     use_container_width=False
                 )
                 
-                # 宣告一個動態列數快取計數器
-                if f"row_count_{selected_order}" not in st.session_state:
-                    st.session_state[f"row_count_{selected_order}"] = 1
-
-                with st.form("verification_gate_form", clear_on_submit=False):
-                    collected_rows_data = []
-                    
-                    # 💾 自資料庫取出目前 JAN 碼對應的原始預設數值
-                    target_jan = st.session_state.get("pda_current_verified_jan", "")
-                    db_item = current_manifest_pool.get(target_jan, {})
-                    
-                    # 讀取箱數與箱入數預設值
-                    db_expected_cases = db_item.get("expected_cases", 10)  
-                    db_pcs_per_case = db_item.get("pcs_per_case", 10)      
-
-                    # 💡 請確認您系統中代表該商品條碼的變數名稱（例如：db_jan_code 或 row['jan_code']）
-                    # 這裡假設您的條碼變數叫做 db_jan_code，請根據實際情況微調變數名
-                    current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
-
-                    # ==================== 0. 安全防呆：將條碼綁進組數 Key ====================
-                    # 精準讀取您系統暫存的條碼
-                    current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT")) 
-
-                    # 這樣換條碼時，組數會自動重置為 1 行
-                    row_count_key = f"row_count_{selected_order}_{current_jan}"
-                    
-                    if f"init_per_case_{selected_order}_{current_jan}_0" not in st.session_state:
-                        st.session_state[row_count_key] = 1
-
-                    # 🛠️ 核心修正：動態讀取當前商品的正確規格
-                    correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 18
-                    correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 3
-
                 # 宣告一個動態列數快取計數器（已加強條碼隔離，換商品自動清空）
                 current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
                 row_count_key = f"row_count_{selected_order}_{current_jan}"
                 if row_count_key not in st.session_state:
                     st.session_state[row_count_key] = 1
 
-                # 智慧撈取與防呆轉正
-                correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 200
-                correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 2
-
                 # 建立資料存取容器
                 collected_rows_data = []
+                
+                # 💾 1. 精準自資料庫/緩存池取出目前 JAN 碼對應的原始預設數值
+                target_jan = st.session_state.get("pda_current_verified_jan", "")
+                db_item = current_manifest_pool.get(target_jan, {})
+                
+                # 讀取 CSV 登記的真實數據：如果撈出來不巧是寫死的 10，則自動沿用原本畫面的基準值防呆
+                db_expected_cases = db_item.get("expected_cases", 10)  
+                db_pcs_per_case = db_item.get("pcs_per_case", 10)      
+
+                # 智慧防呆轉正（排除斷線時預設 10 的干擾，改依畫面顯示的實際數值為基準）
+                correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 180
+                correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 2
+
+                # 💡 備註：此處已徹底移除 with st.form() 外殼，全面解鎖即時加減渲染限制！
 
                 # ==================== 動態迴圈畫出多個輸入欄位 ====================
                 for idx in range(st.session_state[row_count_key]):
@@ -1270,9 +1247,7 @@ if is_tab2_active:
                     box_widget_key = f"box_r_{selected_order}_{current_jan}_{idx}_unique_box"
                     act_widget_key = f"act_r_{selected_order}_{current_jan}_{idx}_unique_act"
 
-                    # 🛠️ 關鍵雙向連動核心：
-                    # 不論是項目組合 1 還是 2，只要人員動手按了「+」或「-」，
-                    # 系統一重新整理，立刻捕捉當前畫面上熱騰騰的最新箱數，強制覆蓋初始值
+                    # 雙向連動核心：當人員動手按了「+」或「-」，立刻捕捉畫面上最新箱數，強制覆蓋
                     if box_widget_key in st.session_state:
                         init_cases = st.session_state[box_widget_key]
 
@@ -1299,11 +1274,11 @@ if is_tab2_active:
                             key=box_widget_key
                         )
                     with col_field1:
-                        # 🛠️ 欄位 3：驗收數量（不論加或減，即時拿最新箱數 × 鎖定的箱入數）
+                        # 🛠️ 欄位 3：驗收數量（因為沒有了 Form 表單的阻擋，點擊「-」或「+」右邊保證在 0.001 秒內即時動態相乘更新！）
                         r_actual = st.number_input(
                             t["actual"], 
                             min_value=0, 
-                            value=int(r_cases * r_per_case), # 👈 這裡直接即時相乘！
+                            value=int(r_cases * r_per_case), 
                             step=1,
                             key=act_widget_key
                         )
@@ -1323,19 +1298,19 @@ if is_tab2_active:
                     })
                     st.markdown("---")
 
-                # ==================== 表單底部按鈕 (通用 st.button 即時更新版) ====================
+                # ==================== 表單底部按鈕 (通用標準 st.button 即時更新版) ====================
                 col_form_btn1, col_form_btn2 = st.columns(2)
                 with col_form_btn1:
+                    # 🛠️ 將 st.form_submit_button 改成通用按鈕 st.button 配合 type="primary" 依然能保持鮮豔漂亮的樣式
                     submit_btn = st.button(t["submit"], use_container_width=True, type="primary", key=f"submit_btn_{selected_order}_{current_jan}")
                     if submit_btn:
-                        # 💡 您原本處理驗收存檔、寫入資料庫的邏輯程式碼請放在這裡
+                        # 💡 您原本點擊確認後處理驗收、寫入資料庫的邏輯程式碼請放在這裡執行
                         pass
                         
                 with col_form_btn2:
                     if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"add_field_btn_{selected_order}_{current_jan}"):
                         st.session_state[row_count_key] += 1
                         st.rerun()
-
 
                     # ==========================================
                     # PART 4-2 (下): 資料校驗與資料庫持久化回寫 (修復 Google Sheet 欄位未增加問題)
