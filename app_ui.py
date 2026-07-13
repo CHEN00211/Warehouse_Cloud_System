@@ -1307,8 +1307,9 @@ if is_tab2_active:
                     st.markdown("---")
 
                 # ==================== 對話框專屬：底部控制按鈕區 ====================
-                # 🛠️ 調整比例 [3.2, 1.8]：完美還原您第一張圖「左邊按鈕極長、右邊按鈕較短」的視覺對齊比例
-                col_btn1, col_btn2 = st.columns([3.2, 1.8])
+                # 🛠️ 調整比例：改為 [2.5, 2.5] 完全平分，讓兩個按鈕大小一致、更加平均好看！
+                # 如果希望左邊按鈕稍微寬一點點，也可以嘗試改用 [2.7, 2.3]
+                col_btn1, col_btn2 = st.columns([2.5, 2.5])
                 with col_btn1:
                     # 🛠️ 核心修復：維持變數賦值，解決後續邏輯的 NameError
                     submit_btn = st.button(
@@ -1326,6 +1327,7 @@ if is_tab2_active:
                     if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}"):
                         st.session_state[row_count_key] += 1
                         st.rerun()
+
 
 
                     # ==========================================
