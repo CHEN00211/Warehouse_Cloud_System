@@ -1273,33 +1273,28 @@ if is_tab2_active:
                         box_widget_key = f"box_r_{selected_order}_{current_jan}_{idx}_unique_box"
                         actual_widget_key = f"act_r_{selected_order}_{current_jan}_{idx}_unique_act"
 
-                        # 2. 智慧預算機制：在畫面畫出來之前，先把正確的總驗收數量算好塞進保險箱
-                        if box_widget_key not in st.session_state:
-                            st.session_state[box_widget_key] = int(init_cases)
-                        
-                        # 隨時根據目前輸入的箱數，即時更新驗收數量的快取值
-                        current_box_count = st.session_state[box_widget_key]
-                        st.session_state[actual_widget_key] = int(current_box_count * init_per_case)
-
                         with col_box:
-                            # 🛠️ 欄位 2：箱數（完全移除 on_change，改由 value 來觸發即時重新渲染）
+                            # 🛠️ 欄位 2：箱數（維持原樣，但使用 init_cases 作為最純粹的初始值）
                             r_cases = st.number_input(
                                 "箱數" if st.session_state.lang == "zh" else "箱数", 
                                 min_value=0, 
-                                value=st.session_state[box_widget_key], # 👈 綁定安全快取值
+                                value=int(init_cases), 
                                 step=1, 
                                 key=box_widget_key
                             )
                             
                         with col_field1:
-                            # 🛠️ 欄位 3：驗收數量（同樣綁定算好的快取值）
+                            # 🛠️ 欄位 3：驗收數量（關鍵修正！）
+                            # 直接拿上面剛剛宣告出來、點貨人員熱騰騰輸入的 r_cases 去乘以鎖定的 r_per_case（也就是 init_per_case）
+                            # 這樣不管是剛長出來（0 × 72 = 0），還是人員動手按了加號（1 × 72），右邊都會瞬間像魔法一樣自動更新！
                             r_actual = st.number_input(
                                 t["actual"], 
                                 min_value=0, 
-                                value=st.session_state[actual_widget_key], # 👈 一長出來就是相乘後的正確數字！
+                                value=int(r_cases * init_per_case), # 👈 直接在這裡拿熱騰騰的變數相乘！
                                 step=1,
                                 key=actual_widget_key 
                             )
+
 
 
                         with col_field2:
