@@ -1587,13 +1587,25 @@ if is_tab2_active:
                 exp_col = "賞味期限"
                 status_col = "ステータス"
 
-            # 💡【Tab2 核心合算門神】計算該單據各 JAN 碼的總實到數量（主行+所有副行）
+            # ==================================================================
+            # 🌟 核心修復：狀態安全過濾（只有狀態為 "決收點貨" 的實到數量才進行累加）
+            # ==================================================================
             jan_total_actual_map = {}
             for k, v in current_manifest_pool.items():
                 real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
                 if real_jan not in jan_total_actual_map:
                     jan_total_actual_map[real_jan] = 0
-                jan_total_actual_map[real_jan] += v["actual_count"]
+                
+                # 🔒 安全閘門：只有當這一個行（或副行）確實完成點收時，才累加它的實到數量
+                if v.get("status") == "決收點貨":
+                    # 防禦 NoneType：如果取出來是 None，安全轉型為 0 進行計算
+                    raw_act = v.get("actual_count", 0)
+                    act_val = int(raw_act) if (raw_act is not None and str(raw_act).isdigit()) else 0
+                    jan_total_actual_map[real_jan] += act_val
+                else:
+                    # 如果根本還沒點收，實到增量直接視為 0
+                    jan_total_actual_map[real_jan] += 0
+
 
             receiving_report_list = []
             for k, v in current_manifest_pool.items():
