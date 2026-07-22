@@ -1203,7 +1203,10 @@ if is_tab2_active:
                 st.session_state.pda_key += 1
 
 
-            st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
+            st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}_{st.session_state.t2_submit_counter}", on_change=handle_pda_scan_secure)
+            if "t2_submit_counter" not in st.session_state:
+                st.session_state["t2_submit_counter"] = 0
+
 
             if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
                 st.error(st.session_state.pda_error_msg.replace("！", ""))
@@ -1267,10 +1270,15 @@ if is_tab2_active:
                 for idx in range(st.session_state[row_count_key]):
                     st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                     
-                    # 為每一個輸入框建立全宇宙唯一的獨立狀態 Key
-                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}"
-                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}"
-                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
+                 # 為每一個輸入框建立全宇宙唯一的獨立狀態 Key（結尾引入計數器變數）
+                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
+                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
+                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
+
+                # 💡 額外新增：為 Lot 批次與有效期限也綁定專屬變數（對齊 Tab 4 獨立 Key 邏輯）
+                    lot_widget_key = f"dlg_lot_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
+                    exp_widget_key = f"dlg_exp_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
+
 
                     # 箱入數永遠鎖定不變
                     live_per_val = correct_per_case 
@@ -1320,7 +1328,7 @@ if is_tab2_active:
                         r_lot = st.text_input(
                             lot_field_label, 
                             value="", 
-                            key=f"dlg_lot_{selected_order}_{current_jan}_{idx}"
+                            key=lot_widget_key
                         ) 
                     with col_exp:
                         # 欄位 5：有效期限
@@ -1329,7 +1337,7 @@ if is_tab2_active:
                             expiry_label, 
                             value="", 
                             placeholder="2026/1/1", 
-                            key=f"dlg_exp_{selected_order}_{current_jan}_{idx}"
+                            key=exp_widget_key
                         ) 
 
                     # 封裝收集本組的數據
@@ -1352,7 +1360,7 @@ if is_tab2_active:
                         t["submit"] if "submit" in t else "確認提交", 
                         use_container_width=True, 
                         type="primary", 
-                        key=f"dlg_sub_btn_{selected_order}_{current_jan}"
+                        key=f"dlg_sub_btn_{selected_order}_{current_jan}_{st.session_state.t2_submit_counter}"
                     )
                     if submit_btn:
                         # 💡 您原本點擊確認後處理存檔、寫入資料庫的邏輯程式碼會在這裡執行
@@ -1360,7 +1368,7 @@ if is_tab2_active:
                         
                 with col_btn2:
                     # 點擊此按鈕，組數自動 +1 並即時強制重整重新繪製出乾淨的新一列組合
-                    if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}"):
+                    if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}_{st.session_state.t2_submit_counter}"
                         st.session_state[row_count_key] += 1
                         st.rerun()
 
@@ -1528,7 +1536,21 @@ if is_tab2_active:
                             except Exception as cloud_err:
                                 st.error(f"雲端持久化失敗: {cloud_err}")
 
+                            # 1. 遞增 Tab 2 專屬的提交計數器（如同 Tab 4 的 scan_counter += 1 原理）
+                            st.session_state["t2_submit_counter"] += 1
+
+                            # 2. 將畫面增開的動態項目組合行數重設回初始的 1 行
+                            st.session_state[row_count_key] = 1
+
+                            # 3. 清除目前已驗收的單品 JAN 碼，使 UI 面板自動隱藏，回歸初始等待掃描狀態
+                            st.session_state["pda_current_verified_jan"] = None
+
+                            # 4. 鎖定成功提示訊息進入 Tab 2 的獨立隔離口袋（如果需要對齊 Tab 4 提示機制的話）
+                            st.session_state["t2_success_msg"] = f"JAN 碼 {target_jan} 單品驗收提交成功！欄位已完全重設。"
+
+                            # 5. 最後才執行您原本就有的重整畫面
                             st.rerun()
+
 
 
 
