@@ -1622,9 +1622,14 @@ if is_tab2_active:
                     display_jan = k
                 
                 if v.get("status") == "決收點貨":
-                    item_status = "驗貨完畢" if st.session_state.lang == "zh" else "検収完了"
+                    # 💡 核心修復：如果已經驗貨，但預計數與總實到數有落差（包含少到或超到）
+                    if calc_shortage != 0:
+                        item_status = "數量有差異" if st.session_state.lang == "zh" else "数量差異あり"
+                    else:
+                        item_status = "驗貨完畢" if st.session_state.lang == "zh" else "検収完了"
                 else:
                     item_status = "未點收" if st.session_state.lang == "zh" else "未検収"
+
                 
                 # ==================================================================
                 # 🌟 核心修復：精準過濾邏輯（只有當實到小於預計、且確實有欠貨時才判定為未到貨）
