@@ -877,21 +877,21 @@ if is_tab1_active:
                     # 🌟 元件清空閘門：儲存成功後，迴圈 del 徹底清除本單品輸入框的殘留快取
                     # ==================================================================
                     t2_total_rows = st.session_state.get(row_count_key, 1)
-                        for r_idx in range(t2_total_rows):
-                            keys_to_clean = [
-                                f"dlg_box_widget_{selected_order}_{target_jan}_{r_idx}",
-                                f"dlg_per_widget_{selected_order}_{target_jan}_{r_idx}",
-                                f"dlg_act_widget_{selected_order}_{target_jan}_{r_idx}",
-                                f"dlg_lot_{selected_order}_{target_jan}_{r_idx}",
-                                f"dlg_exp_{selected_order}_{target_jan}_{r_idx}"
-                            ]
-                            for k in keys_to_clean:
-                                if k in st.session_state:
-                                    del st.session_state[k]
+                    for r_idx in range(t2_total_rows):
+                        keys_to_clean = [
+                             f"dlg_box_widget_{selected_order}_{target_jan}_{r_idx}",
+                             f"dlg_per_widget_{selected_order}_{target_jan}_{r_idx}",
+                             f"dlg_act_widget_{selected_order}_{target_jan}_{r_idx}",
+                              f"dlg_lot_{selected_order}_{target_jan}_{r_idx}",
+                              f"dlg_exp_{selected_order}_{target_jan}_{r_idx}"
+                        ]
+                          for k in keys_to_clean:
+                              if k in st.session_state:
+                                   del st.session_state[k]
                     
-                        st.session_state[row_count_key] = 1
-                        st.session_state["pda_current_verified_jan"] = None
-                        st.rerun()
+                   st.session_state[row_count_key] = 1
+                   st.session_state["pda_current_verified_jan"] = None
+                   st.rerun()
 
                         
                     else:
