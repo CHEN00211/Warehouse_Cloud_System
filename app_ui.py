@@ -863,6 +863,31 @@ if is_tab1_active:
                         except Exception as cloud_err:
                             st.error(f"雲端持久化失敗: {cloud_err}")
 
+                        # 🎯 【注意這裡！】必須跟下方的 st.rerun() 與上方的 try/except 同一條線
+                        # ====================================================
+                        # 🎯 新增：點收成功後，自動清空當前單品欄位狀態
+                        # ====================================================
+                        # 1. 清空當前驗證成功的 JAN 碼與商品資訊暫存
+                        st.session_state.pda_current_verified_jan = ""
+                        st.session_state.pda_temp_name_ja = ""
+                        st.session_state.pda_temp_expected_count = 0
+                        st.session_state.pda_temp_actual_count = 0
+                        st.session_state.pda_show_dup_warning = False
+                        st.session_state.pda_error_msg = ""
+                            
+                        # 2. 清空動態生成的「項目組合」
+                        if row_count_key in st.session_state:
+                            current_rows = st.session_state[row_count_key]
+                            for idx in range(current_rows):
+                                st.session_state.pop(f"dlg_box_widget_{selected_order}_{target_jan}_{idx}", None)
+                                st.session_state.pop(f"dlg_act_widget_{selected_order}_{target_jan}_{idx}", None)
+                                st.session_state.pop(f"dlg_lot_{selected_order}_{target_jan}_{idx}", None)
+                                st.session_state.pop(f"dlg_exp_{selected_order}_{target_jan}_{idx}", None)
+                                
+                            st.session_state[row_count_key] = 1
+
+                        st.session_state["pda_success_msg"] = f"🎉 商品 [{target_jan}] 驗收資料提交成功！"
+
                         st.rerun()
                         
                     else:
