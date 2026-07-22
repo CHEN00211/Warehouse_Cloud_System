@@ -856,42 +856,42 @@ if is_tab1_active:
                                     str(c_cases),
                                     "決收點貨",
                                     str(current_doc.get("archived_order", "False"))
-                            ])
+                                ])
 
-                        # 🔒 完美對齊第 836 行的幽靈 try 閘門，將其在此精準閉環！
-                        try:
-                            if rows_to_append:
-                                # 1. 增量追加至 Google Sheet Manifest 工作表
-                                manifest_sheet.append_rows(rows_to_append)
+                            # 🔒 完美對齊第 836 行的幽靈 try 閘門，將其在此精準閉環！
+                            try:
+                                if rows_to_append:
+                                    # 1. 增量追加至 Google Sheet Manifest 工作表
+                                    manifest_sheet.append_rows(rows_to_append)
                                 
-                                # 🔒 核心持久化修復：立刻同步鎖死回資料庫檔案，防止重整後被沖掉
-                                if "save_data" in globals():
+                                    # 🔒 核心持久化修復：立刻同步鎖死回資料庫檔案，防止重整後被沖掉
+                                    if "save_data" in globals():
                                     save_data(db)
-                                elif "save_db" in globals():
-                                    save_db(db)
+                                    elif "save_db" in globals():
+                                        save_db(db)
                                     
-                        except Exception as cloud_err:
-                            st.error(f"雲端持久化失敗: {cloud_err}")
+                            except Exception as cloud_err:
+                                st.error(f"雲端持久化失敗: {cloud_err}")
 
                     # ==================================================================
                     # 🌟 元件清空閘門：儲存成功後，迴圈 del 徹底清除本單品輸入框的殘留快取
                     # ==================================================================
-                    t2_total_rows = st.session_state.get(row_count_key, 1)
-                    for r_idx in range(t2_total_rows):
-                        keys_to_clean = [
-                            f"dlg_box_widget_{selected_order}_{target_jan}_{r_idx}",
-                            f"dlg_per_widget_{selected_order}_{target_jan}_{r_idx}",
-                            f"dlg_act_widget_{selected_order}_{target_jan}_{r_idx}",
-                            f"dlg_lot_{selected_order}_{target_jan}_{r_idx}",
-                            f"dlg_exp_{selected_order}_{target_jan}_{r_idx}"
-                        ]
-                        for k in keys_to_clean:
-                            if k in st.session_state:
-                                del st.session_state[k]
+                        t2_total_rows = st.session_state.get(row_count_key, 1)
+                        for r_idx in range(t2_total_rows):
+                            keys_to_clean = [
+                                f"dlg_box_widget_{selected_order}_{target_jan}_{r_idx}",
+                                f"dlg_per_widget_{selected_order}_{target_jan}_{r_idx}",
+                                f"dlg_act_widget_{selected_order}_{target_jan}_{r_idx}",
+                                f"dlg_lot_{selected_order}_{target_jan}_{r_idx}",
+                                f"dlg_exp_{selected_order}_{target_jan}_{r_idx}"
+                            ]
+                            for k in keys_to_clean:
+                                if k in st.session_state:
+                                    del st.session_state[k]
                     
-                    st.session_state[row_count_key] = 1
-                    st.session_state["pda_current_verified_jan"] = None
-                    st.rerun()
+                        st.session_state[row_count_key] = 1
+                        st.session_state["pda_current_verified_jan"] = None
+                        st.rerun()
 
                         
                     else:
