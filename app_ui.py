@@ -1547,12 +1547,57 @@ if is_tab2_active:
                             # 💡 核心修正：就地建立完全隔離的數據平鋪，徹底消滅所有前後命名覆蓋衝突與 TypeError
                             manifest_sheet = get_google_sheet("Manifest")
                             flattened_rows_list = []
-                            for o_no, doc in db["manifest_by_order"].items():
-                                info = doc.get("info", {})
-                                for jan_code, item in doc.get("items", {}).items():
-                                    # 💡 強制進行安全轉型，確保數據中絕對不夾帶隱形 NoneType 導致底層衝突
-                                    flattened_rows_list.append([
-                                        str(o_no if o_no is not None else "-"),
+                            # ==================================================================
+                            # 🌟 多人安全併發修正：動態單據隔離平鋪覆寫（徹底解決 A 覆蓋 B 的問題）🌟
+                            # ==================================================================
+                            try:
+                                manifest_sheet = get_google_sheet("Manifest")
+                                header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
+                                
+                                # 1. ⚡ 實時拉取雲端當前最真實的整張大表（保留別人剛剛提交的單據）
+                                try:
+                                    cloud_records = manifest_sheet.get_all_records()
+                                except Exception:
+                                    # 備援：若 get_all_records 失敗則改用 get_all_values
+                                    cloud_values = manifest_sheet.get_all_values()
+                                    if len(cloud_values) > 1:
+                                        cloud_headers = cloud_values[0]
+                                        cloud_records = [dict(zip(cloud_headers, row)) for row in cloud_values[1:]]
+                                    else:
+                                        cloud_records = []
+
+                                # 2. 把「不是目前這張單（其他作業員的單據）」的雲端資料完好無損地保留下來
+                                final_flattened_rows_list = []
+                                for rec in cloud_records:
+                                    c_order_no = str(rec.get("order_no", "")).strip()
+                                    # 如果這列資料的單號不是目前正在操作的單號，就原地保留
+                                    if c_order_no != str(selected_order) and c_order_no != "":
+                                        final_flattened_rows_list.append([
+                                            str(rec.get("order_no", "-")),
+                                            str(rec.get("vendor", "-")),
+                                            str(rec.get("expected_delive", "-")),
+                                            str(rec.get("operator", "-")),
+                                            str(rec.get("jan_code", "-")),
+                                            str(rec.get("name_ja", "-")),
+                                            str(rec.get("lot_no", "")),
+                                            str(rec.get("expiry", "")),
+                                            str(rec.get("expected_count", 0)),
+                                            str(rec.get("actual_count", 0)),
+                                            str(rec.get("expected_cases", 0)),
+                                            str(rec.get("pcs_per_case", 0)),
+                                            str(rec.get("actual_cases", 0)),
+                                            str(rec.get("status", "未點收")),
+                                            str(rec.get("archived_order", "False"))
+                                        ])
+
+                                # 3. 🧩 只針對「目前這張單據 (selected_order)」從您本地最新的 db 中平鋪攤平
+                                current_doc = db["manifest_by_order"].get(selected_order, {})
+                                info = current_doc.get("info", {})
+                                
+                                # 將目前這張單據最新的主副行打包，準備追加進去
+                                for jan_code, item in current_doc.get("items", {}).items():
+                                    final_flattened_rows_list.append([
+                                        str(selected_order if selected_order is not None else "-"),
                                         str(info.get("vendor", "-") if info.get("vendor") is not None else "-"),
                                         str(info.get("expected_delivery", "-") if info.get("expected_delivery") is not None else "-"),
                                         str(info.get("operator", "-") if info.get("operator") is not None else "-"),
@@ -1566,19 +1611,18 @@ if is_tab2_active:
                                         str(item.get("pcs_per_case", 0) if item.get("pcs_per_case") is not None else 0),
                                         str(item.get("actual_cases", 0) if item.get("actual_cases") is not None else 0),
                                         str(item.get("status", "未點收") if item.get("status") is not None else "未點收"),
-                                        str(doc.get("archived_order", "False") if doc.get("archived_order") is not None else "False")
+                                        str(current_doc.get("archived_order", "False") if current_doc.get("archived_order") is not None else "False")
                                     ])
 
-                            try:
-                                header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
+                                # 4. 🧽 清空雲端，重新射入「其他人的舊單據 + 我這張單據的最新點收與新副行」
                                 manifest_sheet.clear()
                                 
-                                if flattened_rows_list:
-                                    values_to_write = [header] + flattened_rows_list
+                                if final_flattened_rows_list:
+                                    values_to_write = [header] + final_flattened_rows_list
                                 else:
                                     values_to_write = [header]
                                     
-                                # 💡 內建三層語法相容備援，全面瓦解 gspread 所有版本更新引發的 TypeError
+                                # 三層高相容寫入機制
                                 try:
                                     manifest_sheet.update(values_to_write, "A1")
                                 except:
@@ -1586,8 +1630,11 @@ if is_tab2_active:
                                         manifest_sheet.update(range_name="A1", values=values_to_write)
                                     except:
                                         manifest_sheet.append_rows(values_to_write)
+                                        
                             except Exception as cloud_err:
                                 st.error(f"雲端持久化失敗: {cloud_err}")
+                            # ==================================================================
+
 
                             # ==================================================================
                             # 🌟【全新修正：欄位深度自動清空】在 Rerun 前夕，強行清除輸入框記憶體殘留 🌟
