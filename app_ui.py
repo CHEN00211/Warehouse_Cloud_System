@@ -1074,9 +1074,11 @@ if is_tab1_active:
         
         if history_data:
             st.dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
-        if "t1_success_msg" in st.session_state and st.session_state["t1_success_msg"]:
-            st.success(st.session_state["t1_success_msg"])
-            st.session_state["t1_success_msg"] = ""             
+            
+        # 🌟 修正：大表下方只用來顯示「刪除成功」，上傳成功的訊息絕對不會跑到這裡
+        if "t1_delete_success_msg" in st.session_state and st.session_state["t1_delete_success_msg"]:
+            st.success(st.session_state["t1_delete_success_msg"])
+            st.session_state["t1_delete_success_msg"] = "" # 顯示完立刻清空
             
         col_del1, col_del2 = st.columns(2)
         with col_del1:
