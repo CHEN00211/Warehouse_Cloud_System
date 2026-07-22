@@ -817,51 +817,54 @@ if is_tab1_active:
                         st.session_state.f_f_eta = ""
                         st.session_state.t1_form_key += 1
                         
-                        # 💡 終極安全修正：就地建立完全獨立的數據平鋪
-                        manifest_sheet = get_google_sheet("Manifest")
-                        flattened_rows = []
-                        for o_no, doc in db["manifest_by_order"].items():
-                            info = doc.get("info", {})
-                            for jan_code, item in doc.get("items", {}).items():
-                                # 💡 強制進行字串與整數的安全轉型與防禦，確保絕不夾帶隱形 NoneType 導致底層衝突
-                                flattened_rows.append([
-                                    str(o_no if o_no is not None else "-"),
+                        # ==================================================================
+                        # 🌟 核心修復：多人併發安全追加機制（拒絕全量覆蓋，只追加本次點收的行數）
+                        # ==================================================================
+                        try:
+                            manifest_sheet = get_google_sheet("Manifest")
+                            rows_to_append = []
+                            
+                            # 僅提取目前操作的 selected_order 資訊
+                            info = current_doc.get("info", {})
+                            
+                            # 迴圈讀取本次驗證通過、正式寫入記憶體主池（或副行）的最新變更
+                            for idx, v_row in enumerate(validated_rows):
+                                c_actual = v_row["actual"]
+                                c_lot = v_row["lot"]
+                                c_exp = v_row["expiry"]
+                                c_cases = v_row["cases"]          
+                                c_per_case = v_row["pcs_per_case"] 
+                                
+                                # 計算目前項目的預計數（副行預計數為 0）
+                                c_expected_count = current_manifest_pool[target_jan]["expected_count"] if idx == 0 else 0
+                                c_expected_cases = current_manifest_pool[target_jan].get("expected_cases", 0) if idx == 0 else 0
+                                
+                                # 建立完全隔離的單行數據，與 Google Sheet 的 15 個欄位完全對齊
+                                rows_to_append.append([
+                                    str(selected_order if selected_order is not None else "-"),
                                     str(info.get("vendor", "-") if info.get("vendor") is not None else "-"),
                                     str(info.get("expected_delivery", "-") if info.get("expected_delivery") is not None else "-"),
                                     str(info.get("operator", "-") if info.get("operator") is not None else "-"),
-                                    str(jan_code if jan_code is not None else "-"),
-                                    str(item.get("name_ja", "-") if item.get("name_ja") is not None else "-"),
-                                    str(item.get("lot_no", "") if item.get("lot_no") is not None else ""),
-                                    str(item.get("expiry", "") if item.get("expiry") is not None else ""),
-                                    str(item.get("expected_count", 0) if item.get("expected_count") is not None else 0),
-                                    str(item.get("actual_count", 0) if item.get("actual_count") is not None else 0),
-                                    str(item.get("expected_cases", 0) if item.get("expected_cases") is not None else 0),
-                                    str(item.get("pcs_per_case", 0) if item.get("pcs_per_case") is not None else 0),
-                                    str(item.get("actual_cases", 0) if item.get("actual_cases") is not None else 0),
-                                    str(item.get("status", "未點收") if item.get("status") is not None else "未點收"),
-                                    str(doc.get("archived_order", "False") if doc.get("archived_order") is not None else "False")
+                                    str(target_jan if target_jan is not None else "-"),
+                                    str(current_manifest_pool[target_jan]["name_ja"] if current_manifest_pool[target_jan].get("name_ja") is not None else "-"),
+                                    str(c_lot),
+                                    str(c_exp),
+                                    str(c_expected_count),
+                                    str(c_actual),
+                                    str(c_expected_cases),
+                                    str(c_per_case),
+                                    str(c_cases),
+                                    "決收點貨",
+                                    str(current_doc.get("archived_order", "False"))
                                 ])
-
-                        # 💡 就地打包並執行本地防禦寫入器，完全隔絕前後宣告覆蓋爭議
-                        try:
-                            header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
-                            manifest_sheet.clear()
                             
-                            if flattened_rows:
-                                values_to_write = [header] + flattened_rows
-                            else:
-                                values_to_write = [header]
+                            # 🔒 併發安全：使用增量追加追加，絕不呼叫 clear()，A 和 B 的紀錄都能同時共存！
+                            if rows_to_append:
+                                manifest_sheet.append_rows(rows_to_append)
                                 
-                            # 💡 內建三層語法相容備援，全面瓦解 gspread 所有版本更新引發的 TypeError
-                            try:
-                                manifest_sheet.update(values_to_write, "A1")
-                            except:
-                                try:
-                                    manifest_sheet.update(range_name="A1", values=values_to_write)
-                                except:
-                                    manifest_sheet.append_rows(values_to_write)
                         except Exception as cloud_err:
                             st.error(f"雲端持久化失敗: {cloud_err}")
+
 
                         st.rerun()
                         
