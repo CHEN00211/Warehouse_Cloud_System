@@ -874,24 +874,22 @@ if is_tab1_active:
                         st.session_state.pda_temp_actual_count = 0
                         st.session_state.pda_show_dup_warning = False
                         st.session_state.pda_error_msg = ""
-                            
-                        # 2. 【核心修正】不使用 pop 銷毀，而是直接將所有輸入框的狀態重設為初始值
+                        # 2. 將列數歸重設為 1 組
                         if row_count_key in st.session_state:
-                            current_rows = st.session_state[row_count_key]
-                            for idx in range(current_rows):
-                                # 強制將箱數、數量狀態洗回 0
-                                st.session_state[f"dlg_box_widget_{selected_order}_{target_jan}_{idx}"] = 0
-                                st.session_state[f"dlg_act_widget_{selected_order}_{target_jan}_{idx}"] = 0
-                                # 強制將 Lot 批次、有效期限洗回空字串
-                                st.session_state[f"dlg_lot_{selected_order}_{target_jan}_{idx}"] = ""
-                                st.session_state[f"dlg_exp_{selected_order}_{target_jan}_{idx}"] = ""
-                                
-                            # 將項目組合的總列數歸位回 1 組
                             st.session_state[row_count_key] = 1
+                                
+                        # 3. 🔥 關鍵殺招：將版本號直接 + 1！
+                        # 這會導致下次打開時，所有輸入框的 Key 都是全新生成的，Streamlit 記憶體快取會直接失效歸零！
+                        version_key = f"dlg_version_{selected_order}_{target_jan}"
+                        if version_key in st.session_state:
+                            st.session_state[version_key] += 1
+                        else:
+                            st.session_state[version_key] = 1
 
-                            st.session_state["pda_success_msg"] = f"🎉 商品 [{target_jan}] 驗收資料提交成功！"
-
+                        # 4. 寫入隔離成功訊息並重整
+                        st.session_state["pda_success_msg"] = f"商品 [{target_jan}] 驗收資料提交成功！"
                         st.rerun()
+                        
                         
                     else:
                         st.error(t["err_csv_header"])
@@ -1267,6 +1265,17 @@ if is_tab2_active:
                 # ==================== 全新對話框架構：核心變數綁定 ====================
                 current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
                 row_count_key = f"dlg_rows_{selected_order}_{current_jan}"
+
+               # 💡 1. 新增：確保對話框有一個專屬的版本號（用來強制洗掉快取）
+                version_key = f"dlg_version_{selected_order}_{current_jan}"
+                if version_key not in st.session_state:
+                    st.session_state[version_key] = 0
+                current_version = st.session_state[version_key] # 取得當前版本
+
+                # 確保一打開預設絕對只有 1 行
+                if row_count_key not in st.session_state:
+                    st.session_state[row_count_key] = 1
+                
                 
                 # 確保一打開預設絕對只有 1 行，按按鈕才增加
                 if row_count_key not in st.session_state:
@@ -1295,10 +1304,12 @@ if is_tab2_active:
                 for idx in range(st.session_state[row_count_key]):
                     st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                     
-                    # 為每一個輸入框建立全宇宙唯一的獨立狀態 Key
-                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}"
-                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}"
-                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
+                    # 💡 2. 核心修改：在所有 Widget Key 的結尾全部加上 _{current_version}
+                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}_{current_version}"
+                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}_{current_version}"
+                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}_{current_version}"
+                    lot_widget_key = f"dlg_lot_{selected_order}_{current_jan}_{idx}_{current_version}"
+                    exp_widget_key = f"dlg_exp_{selected_order}_{current_jan}_{idx}_{current_version}"
 
                     # 箱入數永遠鎖定不變
                     live_per_val = correct_per_case 
