@@ -1008,69 +1008,6 @@ if is_tab1_active:
         st.session_state["msg_success"] = None
 
 
-# ==========================================
-# PART 3: Tab1 底部未入庫單據一覽與刪除功能
-# ==========================================
-    st.markdown("---")
-    st.text(t["history_title"])
-    
-    if db and "manifest_by_order" in db and db["manifest_by_order"]:
-        history_data = []
-        active_orders = []
-        sorted_orders = sorted(list(db["manifest_by_order"].keys()), reverse=True)
-        
-        display_idx = 1
-        for o_no in sorted_orders:
-            doc = db["manifest_by_order"][o_no]
-            pool = doc.get("items", {})
-            total_items = len(pool)
-            verified_items = sum(1 for item in pool.values() if item.get("status") == "決收點貨")
-            
-            # 💡 只有手動完成了「完成驗貨」結案的單據，才會從這裡隱藏
-            if doc.get("archived_order") is True:
-                continue
-                
-            active_orders.append(o_no)
-            info = doc.get("info", {})
-            
-            # 💡 計算狀態三分法標籤（用於未入庫一覽表）
-            if verified_items == total_items:
-                grid_status = "全數驗收" if st.session_state.lang == "zh" else "全数検収"
-            elif verified_items > 0:
-                grid_status = "部分驗收" if st.session_state.lang == "zh" else "一部検収"
-            else:
-                grid_status = "未驗收" if st.session_state.lang == "zh" else "未検収"
-            
-            # 💡【核心修正】Tab1 未入庫大表標頭純進化分流，完全拆分中日文
-            if st.session_state.lang == "zh":
-                history_data.append({
-                    "序號": display_idx,
-                    "入庫單號": o_no,
-                    "供應商": info.get("vendor", "-"),
-                    "預計入庫日": info.get("expected_delivery", "-"),
-                    "操作人員": info.get("operator", "-"),
-                    "上傳日": info.get("upload_date", "-"),
-                    "商品總品項數": total_items,
-                    "已完成驗貨數": verified_items,
-                    "狀態": grid_status
-                })
-            else:
-                history_data.append({
-                    "項番": display_idx,
-                    "伝票番号": o_no,
-                    "仕入先": info.get("vendor", "-"),
-                    "納品予定日": info.get("expected_delivery", "-"),
-                    "担当者": info.get("operator", "-"),
-                    "取込日時": info.get("upload_date", "-"),
-                    "総品目数": total_items,
-                    "検収完了数": verified_items,
-                    "ステータス": grid_status
-                })
-            display_idx += 1
-        
-        if history_data:
-            st.dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
-            
         col_del1, col_del2 = st.columns(2)
         with col_del1:
             target_to_delete = st.selectbox(t["del_select_label"], options=active_orders, key="delete_order_select", label_visibility="collapsed")
@@ -1117,7 +1054,7 @@ if is_tab1_active:
                         # 3. 📝 準備好要傳送的二維矩陣資料，第一列永遠是「欄位標頭」
                         sheet_data = [columns_template]
                         
-                        # 4. 把每一列資料依照欄位順序塞進去，並確保所有格子都是「純文字」
+                        # 4. 把每一列資料依照欄位順序塞進去，並確保所有格子都是「純文字"]
                         for row_dict in flattened_rows:
                             row_list = [row_dict[col] for col in columns_template]
                             sheet_data.append(row_list)
@@ -1125,15 +1062,29 @@ if is_tab1_active:
                         # 5. 🚀 繞過所有 Pandas 轉型爭議，直接一口氣更新整張 Google Sheet！
                         manifest_sheet.update("A1", sheet_data)
                         
+                        # ==================================================================
+                        # 🌟 新增：將刪除成功的提示訊息寫入分頁一專屬的暫存變數中 🌟
+                        # ==================================================================
+                        if st.session_state.lang == "zh":
+                            st.session_state["t1_success_msg"] = f"單據 {target_to_delete} 已成功刪除！"
+                        else:
+                            st.session_state["t1_success_msg"] = f"伝票 {target_to_delete} が正常に削除されました！"
+                        # ==================================================================
+                        
                     except Exception as e:
                         # 如果底層套件版本太舊，不支援 update(range, values)，則自動退回使用舊版 update_cells 邏輯
                         try:
                             manifest_sheet.update_values("A1", sheet_data)
+                            if st.session_state.lang == "zh":
+                                st.session_state["t1_success_msg"] = f"單據 {target_to_delete} 已成功刪除！"
+                            else:
+                                st.session_state["t1_success_msg"] = f"伝票 {target_to_delete} が正常に削除されました！"
                         except:
                             st.error(f"雲端寫入失敗，請檢查權限或網路: {str(e)}")
                     
                     # 6. 成功重整
                     st.rerun()
+
 
 # ==========================================
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
