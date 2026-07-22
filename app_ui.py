@@ -1098,8 +1098,6 @@ if is_tab1_active:
                     # 6. 成功重整
                     st.rerun()
 
-
-
 # ==========================================
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
 # ==========================================
@@ -1109,7 +1107,7 @@ if is_tab2_active:
         st.success(st.session_state["pda_success_msg"])
         st.session_state["pda_success_msg"] = "" # 顯示完立刻清空
             
-    # 🛠️ 加上 pda_ 前綴，確保這些變數只屬於分頁二，絕不與分頁一、三共享
+    # 🛠️ 加上 pda_ 前綴，確保 these 變數只屬於分頁二，絕不與分頁一、三共享
     if "pda_current_verified_jan" not in st.session_state:
         st.session_state.pda_current_verified_jan = ""
     if "pda_temp_name_ja" not in st.session_state:
@@ -1363,9 +1361,6 @@ if is_tab2_active:
                     if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}"):
                         st.session_state[row_count_key] += 1
                         st.rerun()
-
-
-
                     # ==========================================
                     # PART 4-2 (下): 資料校驗與資料庫持久化回寫 (修復 Google Sheet 欄位未增加問題)
                     # ==========================================
@@ -1482,7 +1477,7 @@ if is_tab2_active:
                                         "is_sub_row": True,
                                         "parent_jan": target_jan
                                     }
-                            
+
                             # 💡 核心修正：就地建立完全隔離的數據平鋪，徹底消滅所有前後命名覆蓋衝突與 TypeError
                             manifest_sheet = get_google_sheet("Manifest")
                             flattened_rows_list = []
@@ -1528,10 +1523,32 @@ if is_tab2_active:
                             except Exception as cloud_err:
                                 st.error(f"雲端持久化失敗: {cloud_err}")
 
+                            # ==================================================================
+                            # 🌟【全新修正：欄位深度自動清空】在 Rerun 前夕，強行清除輸入框記憶體殘留 🌟
+                            # ==================================================================
+                            # 1. 精準取得作業員在畫面上剛剛生成的總項目組合組數
+                            current_total_rows = st.session_state.get(row_count_key, 1)
+                            
+                            # 2. 透過迴圈將所有動態生成的 Widget Key 臨時狀態完全從記憶體中拔除，使其歸零重設
+                            for row_idx in range(current_total_rows):
+                                keys_to_clean = [
+                                    f"dlg_box_widget_{selected_order}_{current_jan}_{row_idx}",
+                                    f"dlg_per_widget_{selected_order}_{current_jan}_{row_idx}",
+                                    f"dlg_act_widget_{selected_order}_{current_jan}_{row_idx}",
+                                    f"dlg_lot_{selected_order}_{current_jan}_{row_idx}",
+                                    f"dlg_exp_{selected_order}_{current_jan}_{row_idx}"
+                                ]
+                                for k in keys_to_clean:
+                                    if k in st.session_state:
+                                        del st.session_state[k]
+                            
+                            # 3. 畫面增開的行數重新收攏回初始 1 行
+                            st.session_state[row_count_key] = 1
+                            
+                            # 4. 解除單品鎖定狀態，回歸最初等待 PDA 盲刷條碼的乾淨狀態
+                            st.session_state["pda_current_verified_jan"] = None
+                            
                             st.rerun()
-
-
-
             st.markdown("---")
             st.text(t["filter_mode"])
             filter_mode = st.radio("Filter Mode", [t["filter_all"], t["filter_short"]], label_visibility="collapsed")
@@ -1554,6 +1571,7 @@ if is_tab2_active:
                 lot_col = "ロット番号"
                 exp_col = "賞味期限"
                 status_col = "ステータス"
+
             # 💡【Tab2 核心合算門神】計算該單據各 JAN 碼的總實到數量（主行+所有副行）
             jan_total_actual_map = {}
             for k, v in current_manifest_pool.items():
@@ -1630,7 +1648,7 @@ if is_tab2_active:
 
                 st.dataframe(df_receiving, use_container_width=True, hide_index=True)
                 
-                #  當前入庫單結案按鈕 (完成驗貨)
+                # 當前入庫單結案按鈕 (完成驗貨)
                 st.markdown("---")
                 archive_btn_label = " 完成本單驗貨（移至歷史存檔）" if st.session_state.lang == "zh" else " 検収完了（履歴に移動）"
                 if st.button(archive_btn_label, type="primary", use_container_width=True, key=f"archive_order_btn_{selected_order}"):
@@ -1641,6 +1659,8 @@ if is_tab2_active:
                     st.rerun()
             else:
                 st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
+
+
 # ==========================================
 # PART 6: Tab4 實體盤點獨立雲端閘門
 # ==========================================
