@@ -889,7 +889,7 @@ if is_tab1_active:
                             # 將項目組合的總列數歸位回 1 組
                             st.session_state[row_count_key] = 1
 
-                      st.session_state["pda_success_msg"] = f"🎉 商品 [{target_jan}] 驗收資料提交成功！"
+                       st.session_state["pda_success_msg"] = f"🎉 商品 [{target_jan}] 驗收資料提交成功！"
 
                         st.rerun()
                         
