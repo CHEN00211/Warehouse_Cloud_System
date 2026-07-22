@@ -866,7 +866,7 @@ if is_tab1_active:
                                 
                                     # 🔒 核心持久化修復：立刻同步鎖死回資料庫檔案，防止重整後被沖掉
                                     if "save_data" in globals():
-                                    save_data(db)
+                                        save_data(db)
                                     elif "save_db" in globals():
                                         save_db(db)
                                     
