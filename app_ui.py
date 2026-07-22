@@ -719,7 +719,14 @@ if "t4_form_key" not in st.session_state:
 # ==========================================
 if is_tab1_active:
     this_tab_name = "上傳明細"
+    # 🌟 修正：最上面只用來顯示「上傳成功」，絕不顯示刪除成功
+    if "t1_upload_success_msg" in st.session_state and st.session_state["t1_upload_success_msg"]:
+        st.success(st.session_state["t1_upload_success_msg"])
+        st.session_state["t1_upload_success_msg"] = "" # 顯示完立刻清空
 
+    is_t1_top_zh = getattr(st.session_state, "lang", "zh") == "zh"
+    t1_top_title = "1. 上傳到貨明細" if is_t1_top_zh else "1. 入庫予定データの取り込み"
+    st.subheader(t1_top_title)
 
     # 💡 核心修復：精準判斷全域語系，完美帶出「1. 上傳到貨明細」的中日文雙語標題
     is_t1_top_zh = getattr(st.session_state, "lang", "zh") == "zh"
