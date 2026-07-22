@@ -868,7 +868,6 @@ if is_tab1_active:
                                 save_data(db)
                             elif "save_db" in globals():
                                 save_db(db)
-                                
                     except Exception as cloud_err:
                         st.error(f"雲端持久化失敗: {cloud_err}")
 
@@ -891,6 +890,7 @@ if is_tab1_active:
                     st.session_state[row_count_key] = 1
                     st.session_state["pda_current_verified_jan"] = None
                     st.rerun()
+
 
                         
                     else:
