@@ -1248,9 +1248,24 @@ if is_tab2_active:
                 db_expected_cases = db_item.get("expected_cases", 10)  
                 db_pcs_per_case = db_item.get("pcs_per_case", 10)      
 
-                # 排除預設值 10 的干擾，如果抓到 10 則自動校正為畫面正確的數值
-                correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 180
-                correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 2
+                # 優先抓取目前畫面上正確的預計應到總數（例如 120）
+                total_expected = int(st.session_state.get("pda_temp_expected_count", 0))
+
+                # 如果抓到預設值 10 或 0，則根據商品規格進行智能判斷
+                if int(db_pcs_per_case) == 10 or int(db_pcs_per_case) == 0:
+                    # 如果總數可以被 180 整除，箱入數就帶 180；否則直接讓 箱入數 = 總預計數
+                    correct_per_case = 180 if (total_expected % 180 == 0 and total_expected > 0) else total_expected
+                else:
+                    correct_per_case = int(db_pcs_per_case)
+
+                # 箱數不再寫死為 2！而是用「預計應到總數 ÷ 箱入數」動態倒推計算
+                if correct_per_case > 0:
+                    calculated_cases = total_expected // correct_per_case
+                    # 如果算出來是 0 箱（預計數小於箱入數），但總數大於 0，則保底帶 1 箱
+                    correct_cases = calculated_cases if calculated_cases > 0 else (1 if total_expected > 0 else 0)
+                else:
+                    correct_cases = 0
+
 
                 # 🛠️ 核心自動相乘聯動回呼函式 (Callback)
                 def update_actual_quantity(box_key, per_val, act_key):
