@@ -858,13 +858,22 @@ if is_tab1_active:
                                     str(current_doc.get("archived_order", "False"))
                                 ])
                             
-                            # 🔒 併發安全：使用增量追加追加，絕不呼叫 clear()，A 和 B 的紀錄都能同時共存！
+                        try:
+                            # ...（您原本的 rows_to_append 組裝不變）...
+                            
                             if rows_to_append:
+                                # 1. 增量追加至 Google Sheet Manifest 工作表
                                 manifest_sheet.append_rows(rows_to_append)
                                 
+                                # 🔒 核心持久化修復：立刻呼叫您系統原本的存檔函式，將 db 完全同步鎖死回資料庫檔案/快取中！
+                                # 這樣一來，本地 db 變更才會被永久保留，絕對不會在重整後被沖掉
+                                if "save_data" in globals():
+                                    save_data(db)
+                                elif "save_db" in globals():
+                                    save_db(db)
+                                    
                         except Exception as cloud_err:
                             st.error(f"雲端持久化失敗: {cloud_err}")
-
 
                         st.rerun()
                         
