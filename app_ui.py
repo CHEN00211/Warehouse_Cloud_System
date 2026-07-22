@@ -719,14 +719,10 @@ if "t4_form_key" not in st.session_state:
 # ==========================================
 if is_tab1_active:
     this_tab_name = "上傳明細"
-    # 🌟 修正：最上面只用來顯示「上傳成功」，絕不顯示刪除成功
-    if "t1_upload_success_msg" in st.session_state and st.session_state["t1_upload_success_msg"]:
-        st.success(st.session_state["t1_upload_success_msg"])
-        st.session_state["t1_upload_success_msg"] = "" # 顯示完立刻清空
-
-    is_t1_top_zh = getattr(st.session_state, "lang", "zh") == "zh"
-    t1_top_title = "1. 上傳到貨明細" if is_t1_top_zh else "1. 入庫予定データの取り込み"
-    st.subheader(t1_top_title)
+    # 🛠️ 將成功訊息改成分頁一專屬的獨立變數名稱（例如：t1_success_msg）
+    if "t1_success_msg" in st.session_state and st.session_state["t1_success_msg"]:
+        st.success(st.session_state["t1_success_msg"])
+        st.session_state["t1_success_msg"] = "" # 顯示完立刻清空
 
     # 💡 核心修復：精準判斷全域語系，完美帶出「1. 上傳到貨明細」的中日文雙語標題
     is_t1_top_zh = getattr(st.session_state, "lang", "zh") == "zh"
@@ -1074,11 +1070,6 @@ if is_tab1_active:
         
         if history_data:
             st.dataframe(pd.DataFrame(history_data), use_container_width=True, hide_index=True)
-            
-        # 🌟 修正：大表下方只用來顯示「刪除成功」，上傳成功的訊息絕對不會跑到這裡
-        if "t1_delete_success_msg" in st.session_state and st.session_state["t1_delete_success_msg"]:
-            st.success(st.session_state["t1_delete_success_msg"])
-            st.session_state["t1_delete_success_msg"] = "" # 顯示完立刻清空
             
         col_del1, col_del2 = st.columns(2)
         with col_del1:
