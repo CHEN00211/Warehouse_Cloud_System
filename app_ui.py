@@ -875,18 +875,21 @@ if is_tab1_active:
                         st.session_state.pda_show_dup_warning = False
                         st.session_state.pda_error_msg = ""
                             
-                        # 2. 清空動態生成的「項目組合」
+                        # 2. 【核心修正】不使用 pop 銷毀，而是直接將所有輸入框的狀態重設為初始值
                         if row_count_key in st.session_state:
                             current_rows = st.session_state[row_count_key]
                             for idx in range(current_rows):
-                                st.session_state.pop(f"dlg_box_widget_{selected_order}_{target_jan}_{idx}", None)
-                                st.session_state.pop(f"dlg_act_widget_{selected_order}_{target_jan}_{idx}", None)
-                                st.session_state.pop(f"dlg_lot_{selected_order}_{target_jan}_{idx}", None)
-                                st.session_state.pop(f"dlg_exp_{selected_order}_{target_jan}_{idx}", None)
+                                # 強制將箱數、數量狀態洗回 0
+                                st.session_state[f"dlg_box_widget_{selected_order}_{target_jan}_{idx}"] = 0
+                                st.session_state[f"dlg_act_widget_{selected_order}_{target_jan}_{idx}"] = 0
+                                # 強制將 Lot 批次、有效期限洗回空字串
+                                st.session_state[f"dlg_lot_{selected_order}_{target_jan}_{idx}"] = ""
+                                st.session_state[f"dlg_exp_{selected_order}_{target_jan}_{idx}"] = ""
                                 
+                            # 將項目組合的總列數歸位回 1 組
                             st.session_state[row_count_key] = 1
 
-                        st.session_state["pda_success_msg"] = f"🎉 商品 [{target_jan}] 驗收資料提交成功！"
+                      st.session_state["pda_success_msg"] = f"🎉 商品 [{target_jan}] 驗收資料提交成功！"
 
                         st.rerun()
                         
