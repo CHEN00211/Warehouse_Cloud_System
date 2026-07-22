@@ -1614,9 +1614,14 @@ if is_tab2_active:
                 else:
                     item_status = "未點收" if st.session_state.lang == "zh" else "未検収"
                 
-                # 過濾模式判斷：若選擇「僅顯示有差異品項」，且差異為 0，則跳過不顯示
-                if filter_mode == t["filter_short"] and calc_shortage == 0:
+                # ==================================================================
+                # 🌟 核心修復：精準過濾邏輯（只有當實到小於預計、且確實有欠貨時才判定為未到貨）
+                # ==================================================================
+                # 真正的「未到貨品項」定義：預計應到數量 > 實到數量（即 calc_shortage 必須大於 0）
+                # 如果選擇僅顯示未到貨，但該品項已經點齊或超收（差異數量 <= 0），則跳過不顯示
+                if filter_mode == t["filter_short"] and calc_shortage <= 0:
                     continue
+
 
                 receiving_report_list.append({
                     jan_col: display_jan,
