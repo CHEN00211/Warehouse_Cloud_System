@@ -720,9 +720,10 @@ if "t4_form_key" not in st.session_state:
 if is_tab1_active:
     this_tab_name = "上傳明細"
     # 🛠️ 將成功訊息改成分頁一專屬的獨立變數名稱（例如：t1_success_msg）
-    if "t1_success_msg" in st.session_state and st.session_state["t1_success_msg"]:
-        st.success(st.session_state["t1_success_msg"])
-        st.session_state["t1_success_msg"] = "" # 顯示完立刻清空
+if "t1_success_msg" in st.session_state and st.session_state["t1_success_msg"]:
+    # 💡 改用 st.toast，會直接在畫面角落彈出一個精緻的半透明小浮窗
+    st.toast(st.session_state["t1_success_msg"], icon="🗑️")
+    st.session_state["t1_success_msg"] = "" # 顯示完立刻清空
 
     # 💡 核心修復：精準判斷全域語系，完美帶出「1. 上傳到貨明細」的中日文雙語標題
     is_t1_top_zh = getattr(st.session_state, "lang", "zh") == "zh"
