@@ -1242,9 +1242,11 @@ if is_tab2_active:
                         
                 # 🔒 key + 1 必須在 if 結束後、函式結束前執行
                 st.session_state.pda_key += 1
-
+            # 💡 1. 新增：在這裡宣告一個專屬的表單實體物理容器
+            pda_form_container = st.empty()
 
             st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
+            
 
             if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
                 st.error(st.session_state.pda_error_msg.replace("！", ""))
@@ -1257,25 +1259,26 @@ if is_tab2_active:
             # PART 4-2 (上): Tab2 確認提交表單與動態欄位生成
             # ==========================================
             if st.session_state.get("pda_current_verified_jan") and st.session_state.get("pda_current_verified_jan") != "ERROR_NOT_FOUND":
-                st.markdown("---")
-                if st.session_state.pda_show_dup_warning:
-                    st.warning(t["dup_warning"].replace("？", "").replace("！", ""))
+               with pda_form_container.container():
+                    st.markdown("---")
+                    if st.session_state.pda_show_dup_warning:
+                        st.warning(t["dup_warning"].replace("？", "").replace("！", ""))
                     
-                info_df = pd.DataFrame([
-                    {"Item_Key": "JAN Code", "Item_Val": st.session_state.get("pda_current_verified_jan", "")},
-                    {"Item_Key": "商品名", "Item_Val": st.session_state.pda_temp_name_ja},
-                    {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.pda_temp_expected_count)}
-                ])
+                    info_df = pd.DataFrame([
+                        {"Item_Key": "JAN Code", "Item_Val": st.session_state.get("pda_current_verified_jan", "")},
+                        {"Item_Key": "商品名", "Item_Val": st.session_state.pda_temp_name_ja},
+                        {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.pda_temp_expected_count)}
+                    ])
                 
-                st.dataframe(
-                    info_df,
-                    hide_index=True,
-                    column_config={
-                        "Item_Key": st.column_config.TextColumn(label="", width="medium"),
-                        "Item_Val": st.column_config.TextColumn(label="", width="large")
-                    },
-                    use_container_width=False
-                )
+                    st.dataframe(
+                        info_df,
+                        hide_index=True,
+                        column_config={
+                            "Item_Key": st.column_config.TextColumn(label="", width="medium"),
+                            "Item_Val": st.column_config.TextColumn(label="", width="large")
+                        },
+                        use_container_width=False
+                    )
                 
                 # ==================== 全新對話框架構：核心變數綁定 ====================
                 current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
@@ -1581,6 +1584,24 @@ if is_tab2_active:
                                         manifest_sheet.append_rows(values_to_write)
                             except Exception as cloud_err:
                                 st.error(f"雲端持久化失敗: {cloud_err}")
+                            # ====================================================
+                            # 🎯 終極修正：直接在實體物理層面上，將整個區塊徹底抹除
+                            # ====================================================
+                            # 1. 🔥 關鍵殺招：直接呼叫空容器的清空方法，瞬間洗掉所有輸入元件
+                            pda_form_container.empty()
+                            
+                            # 2. 照常將狀態機的所有暫存變數歸零，防止後台記憶體殘留
+                            st.session_state.pda_current_verified_jan = ""
+                            st.session_state.pda_temp_name_ja = ""
+                            st.session_state.pda_temp_expected_count = 0
+                            st.session_state.pda_temp_actual_count = 0
+                            st.session_state.pda_show_dup_warning = False
+                            st.session_state.pda_error_msg = ""
+                            
+                            if row_count_key in st.session_state:
+                                st.session_state[row_count_key] = 1
+
+                            st.session_state["pda_success_msg"] = f"🎉 商品 [{target_jan}] 驗收資料提交成功！"                               
 
                             st.rerun()
 
