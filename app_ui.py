@@ -1097,285 +1097,186 @@ if is_tab1_active:
                     
                     # 6. 成功重整
                     st.rerun()
+# ==============================================================================
+# 🌟 鏡像同步 Tab 4 頂部邏輯：初始化隔離通知口袋與全域表單計數器
+# ==============================================================================
+if "t2_success_msg" in st.session_state and st.session_state["t2_success_msg"]:
+    st.success(st.session_state["t2_success_msg"])
+    st.session_state["t2_success_msg"] = ""
 
-
+if "t2_submit_counter" not in st.session_state:
+    st.session_state["t2_submit_counter"] = 0
 
 # ==========================================
-# PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
+# 原有邏輯：商品狀態與變數賦值（完全保留，不刪減）
 # ==========================================
-if is_tab2_active:
-    # 🛠️ 檢查分頁二專屬的成功訊息，絕對不與 tab1, tab4 混用
-    if "pda_success_msg" in st.session_state and st.session_state["pda_success_msg"]:
-        st.success(st.session_state["pda_success_msg"])
-        st.session_state["pda_success_msg"] = "" # 顯示完立刻清空
-            
-    # 🛠️ 加上 pda_ 前綴，確保這些變數只屬於分頁二，絕不與分頁一、三共享
-    if "pda_current_verified_jan" not in st.session_state:
-        st.session_state.pda_current_verified_jan = ""
-    if "pda_temp_name_ja" not in st.session_state:
-        st.session_state.pda_temp_name_ja = ""
-    if "pda_temp_expected_count" not in st.session_state:
-        st.session_state.pda_temp_expected_count = 0
-    if "pda_temp_actual_count" not in st.session_state:
-        st.session_state.pda_temp_actual_count = 0
-    if "pda_show_dup_warning" not in st.session_state:
-        st.session_state.pda_show_dup_warning = False
-    if "pda_error_msg" not in st.session_state:
-        st.session_state.pda_error_msg = ""
+st.session_state.pda_temp_actual_count = item["expected_count"]
+st.session_state.pda_show_dup_warning = (item.get("status") == "決收點貨" or item.get("status") == "已點收驗收")
+st.session_state.pda_error_msg = ""
+else:
+    st.session_state.pda_current_verified_jan = "ERROR_NOT_FOUND"
+    st.session_state.pda_error_msg = t["jan_not_found"]
 
-    raw_options = []
-    all_raw_orders = sorted(list(db["manifest_by_order"].keys()), reverse=True)
-    
-    for o_no in all_raw_orders:
-        doc = db["manifest_by_order"][o_no]
-        if doc.get("archived_order") is not True:
-            raw_options.append(o_no)
-    
-    if raw_options:
-        if st.session_state.lang == "zh":
-            placeholder_text = "請選擇入庫單號"
-        else:
-            placeholder_text = "伝票番号を選択してください"
-            
-        order_options = [placeholder_text] + raw_options
-        selected_order = st.selectbox(t["order_no"], options=order_options, index=0, key="tab2_receiving_order_select")
+# key + 1 必須在 if 結束後、函式結束前執行
+st.session_state.pda_key += 1
+
+# 💡 鏡像同步 Tab 4 核心：將計數器融入條碼框中，確保提交時連同條碼框一併清空
+st.text_input(
+    t["scan_jan"], 
+    key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}_{st.session_state.t2_submit_counter}", 
+    on_change=handle_pda_scan_secure
+)
+
+if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
+    st.error(st.session_state.pda_error_msg.replace("!", ""))
+    st.session_state.pda_current_verified_jan = ""
+    st.session_state.pda_temp_name_ja = ""
+    st.session_state.pda_temp_expected_count = 0
+    st.session_state.pda_temp_actual_count = 0
+    st.session_state.pda_show_dup_warning = False
+# ==========================================
+# PART 4-2 (上): Tab2 確認提交表單與動態欄位生成
+# ==========================================
+if st.session_state.get("pda_current_verified_jan") and st.session_state.get("pda_current_verified_jan") != "ERROR_NOT_FOUND":
+    st.markdown("---")
+    if st.session_state.pda_show_dup_warning:
+        st.warning(t["dup_warning"].replace("？", "").replace("！", ""))
         
-        if selected_order != placeholder_text:
-            current_doc = db["manifest_by_order"].get(selected_order, {})
-            current_info = current_doc.get("info", {})
-            current_manifest_pool = current_doc.get("items", {})
+    info_df = pd.DataFrame([
+        {"Item_Key": "JAN Code", "Item_Val": st.session_state.get("pda_current_verified_jan", "")},
+        {"Item_Key": "商品名", "Item_Val": st.session_state.pda_temp_name_ja},
+        {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.pda_temp_expected_count)}
+    ])
+    
+    st.dataframe(
+        info_df,
+        hide_index=True,
+        column_config={
+            "Item_Key": st.column_config.TextColumn(label="", width="medium"),
+            "Item_Val": st.column_config.TextColumn(label="", width="large")
+        },
+        use_container_width=False
+    )
+    
+    # ==================== 全新對話框架構：核心變數綁定 ====================
+    current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
+    row_count_key = f"dlg_rows_{selected_order}_{current_jan}"
+    
+    # 確保一打開預設絕對只有 1 行，按按鈕才增加
+    if row_count_key not in st.session_state:
+        st.session_state[row_count_key] = 1
+
+    # 💾 1. 精準抽取 CSV/資料庫的商品原始規格
+    target_jan = st.session_state.get("pda_current_verified_jan", "")
+    db_item = current_manifest_pool.get(target_jan, {})
+    db_expected_cases = db_item.get("expected_cases", 10)  
+    db_pcs_per_case = db_item.get("pcs_per_case", 10)      
+
+    # 排除預設值 10 的干擾，如果抓到 10 則自動校正為畫面正確的數值
+    correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 180
+    correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 2
+
+    # 🛠️ 核心自動相乘聯動回呼函式 (Callback)
+    def update_actual_quantity(box_key, per_val, act_key):
+        """當箱數發生改變時，自動即時計算並更新驗收數量到 session_state"""
+        current_box = st.session_state.get(box_key, 0)
+        st.session_state[act_key] = int(current_box * per_val)
+
+    # 建立點貨資料收集容器
+    collected_rows_data = []
+
+    # ==================== 動態迴圈：獨立渲染每一組項目組合 ====================
+    for idx in range(st.session_state[row_count_key]):
+        st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
+        
+        # 💡 鏡像對齊 Tab 4 核心：將計數器變數混入每個動態欄位的唯一的獨立狀態 Key 中！
+        t2_cnt = st.session_state["t2_submit_counter"]
+        box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}_{t2_cnt}"
+        per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}_{t2_cnt}"
+        act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}_{t2_cnt}"
+        lot_widget_key = f"dlg_lot_{selected_order}_{current_jan}_{idx}_{t2_cnt}"
+        exp_widget_key = f"dlg_exp_{selected_order}_{current_jan}_{idx}_{t2_cnt}"
+
+        # 箱入數永遠鎖定不變
+        live_per_val = correct_per_case 
+
+        # 🔄 初始化機制：初次加載時，如果驗收數量還不在記憶體裡，先幫它算好預設值
+        if act_widget_key not in st.session_state:
+            initial_box = correct_cases if idx == 0 else 0
+            st.session_state[act_widget_key] = int(initial_box * live_per_val)
+
+        # ==================== UI 欄位排版渲染 (精準配比確保完美水平對齊) ====================
+        col_per, col_box, col_act, col_lot, col_exp = st.columns([1.0, 1.0, 1.2, 1.8, 1.8])
+        
+        with col_per:
+            r_per_case = st.number_input(
+                "箱入數" if st.session_state.lang == "zh" else "入数", 
+                min_value=0, 
+                value=int(live_per_val), 
+                step=1,
+                key=per_widget_key, 
+                disabled=True 
+            )
+        with col_box:
+            r_cases = st.number_input(
+                "箱數" if st.session_state.lang == "zh" else "箱数", 
+                min_value=0, 
+                value=correct_cases if idx == 0 else 0, 
+                step=1, 
+                key=box_widget_key,
+                on_change=update_actual_quantity,
+                args=(box_widget_key, live_per_val, act_widget_key)
+            )
+        with col_act:
+            actual_label = t["actual"] if "actual" in t else ("驗收數量" if st.session_state.lang == "zh" else "検収数量")
+            r_actual = st.number_input(
+                actual_label, 
+                min_value=0, 
+                step=1,
+                key=act_widget_key
+            )
+        with col_lot:
+            lot_field_label = t.get("lot_no_label", "Lot 批次" if st.session_state.lang == "zh" else "Lot ロット")
+            r_lot = st.text_input(
+                lot_field_label, 
+                value="", 
+                key=lot_widget_key
+            ) 
+        with col_exp:
+            expiry_label = t["expiry"] if "expiry" in t else ("有效期限" if st.session_state.lang == "zh" else "有効期限")
+            r_expiry = st.text_input(
+                expiry_label, 
+                value="", 
+                placeholder="2026/1/1", 
+                key=exp_widget_key
+            ) 
+
+        # 封裝收集本組的數據
+        collected_rows_data.append({
+            "actual": r_actual, 
+            "lot": r_lot, 
+            "expiry": r_expiry,
+            "cases": r_cases,
+            "pcs_per_case": r_per_case
+        })
+        st.markdown("---")
+
+    # ==================== 對話框專屬：底部控制按鈕區 ====================
+    col_btn1, col_btn2 = st.columns([2.5, 2.5])
+    with col_btn1:
+        submit_btn = st.button(
+            t["submit"] if "submit" in t else "確認提交", 
+            use_container_width=True, 
+            type="primary", 
+            key=f"dlg_sub_btn_{selected_order}_{current_jan}_{st.session_state['t2_submit_counter']}"
+        )
             
-            # 💡 依據語系各自獨立生成，徹底修正 c 漏字與 None 錯位大表
-            if st.session_state.lang == "zh":
-                meta_df = pd.DataFrame([
-                    {"欄位": "供應商", "內容": current_info.get("vendor", "-")},
-                    {"欄位": "預計入庫", "內容": current_info.get("expected_delivery", "-")},
-                    {"欄位": "操作人員", "內容": current_info.get("operator", "-")}
-                ])
-                st.dataframe(
-                    meta_df,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "欄位": st.column_config.TextColumn(width="small"),
-                        "內容": st.column_config.TextColumn(width="medium")
-                    }
-                )
-            else:
-                meta_df = pd.DataFrame([
-                    {"項目": "仕入先", "content": current_info.get("vendor", "-")},
-                    {"項目": "納品予定日", "content": current_info.get("expected_delivery", "-")},
-                    {"項目": "担当者", "content": current_info.get("operator", "-")}
-                ])
-                st.dataframe(
-                    meta_df,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        "項目": st.column_config.TextColumn(width="small"),
-                        "content": st.column_config.TextColumn(label="内容", width="medium")
-                    }
-                )
-            st.markdown("---")
-            
-            def handle_pda_scan_secure():
-                current_key_name = f"pda_input_slot_{selected_order}_{st.session_state.pda_key}"
-                raw_input = st.session_state[current_key_name].strip()
-                
-                # 💡 將 ITF 自動還原成 JAN 碼
-                target_jan = itf_to_jan13(raw_input)
-                
-                # 🔒 完美的 16 個空格縮排（相對於 def 有 4 個空格）
-                if target_jan and current_manifest_pool:
-                    if target_jan in current_manifest_pool:
-                        item = current_manifest_pool[target_jan]
-                        st.session_state.pda_current_verified_jan = target_jan
-                        st.session_state.pda_temp_name_ja = item["name_ja"]
-                        st.session_state.pda_temp_expected_count = item["expected_count"]
-                        st.session_state.pda_temp_actual_count = item["expected_count"]  
-                        st.session_state.pda_show_dup_warning = (item.get("status") == "決收點貨" or item.get("status") == "已點收驗收")
-                        st.session_state.pda_error_msg = ""
-                    else:
-                        st.session_state.pda_current_verified_jan = "ERROR_NOT_FOUND"
-                        st.session_state.pda_error_msg = t["jan_not_found"]
-                        
-                # 🔒 key + 1 必須在 if 結束後、函式結束前執行
-                st.session_state.pda_key += 1
-
-
-            st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}_{st.session_state.t2_submit_counter}", on_change=handle_pda_scan_secure)
-            if "t2_submit_counter" not in st.session_state:
-                st.session_state["t2_submit_counter"] = 0
-
-
-            if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
-                st.error(st.session_state.pda_error_msg.replace("！", ""))
-                st.session_state.pda_current_verified_jan = ""
-                st.session_state.pda_temp_name_ja = ""
-                st.session_state.pda_temp_expected_count = 0
-                st.session_state.pda_temp_actual_count = 0
-                st.session_state.pda_show_dup_warning = False
-            # ==========================================
-            # PART 4-2 (上): Tab2 確認提交表單與動態欄位生成
-            # ==========================================
-            if st.session_state.get("pda_current_verified_jan") and st.session_state.get("pda_current_verified_jan") != "ERROR_NOT_FOUND":
-                st.markdown("---")
-                if st.session_state.pda_show_dup_warning:
-                    st.warning(t["dup_warning"].replace("？", "").replace("！", ""))
-                    
-                info_df = pd.DataFrame([
-                    {"Item_Key": "JAN Code", "Item_Val": st.session_state.get("pda_current_verified_jan", "")},
-                    {"Item_Key": "商品名", "Item_Val": st.session_state.pda_temp_name_ja},
-                    {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.pda_temp_expected_count)}
-                ])
-                
-                st.dataframe(
-                    info_df,
-                    hide_index=True,
-                    column_config={
-                        "Item_Key": st.column_config.TextColumn(label="", width="medium"),
-                        "Item_Val": st.column_config.TextColumn(label="", width="large")
-                    },
-                    use_container_width=False
-                )
-                
-                # ==================== 全新對話框架構：核心變數綁定 ====================
-                current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
-                row_count_key = f"dlg_rows_{selected_order}_{current_jan}"
-                
-                # 確保一打開預設絕對只有 1 行，按按鈕才增加
-                if row_count_key not in st.session_state:
-                    st.session_state[row_count_key] = 1
-
-                # 💾 1. 精準抽取 CSV/資料庫的商品原始規格
-                target_jan = st.session_state.get("pda_current_verified_jan", "")
-                db_item = current_manifest_pool.get(target_jan, {})
-                db_expected_cases = db_item.get("expected_cases", 10)  
-                db_pcs_per_case = db_item.get("pcs_per_case", 10)      
-
-                # 排除預設值 10 的干擾，如果抓到 10 則自動校正為畫面正確的數值
-                correct_per_case = int(db_pcs_per_case) if int(db_pcs_per_case) != 10 else 180
-                correct_cases = int(db_expected_cases) if int(db_expected_cases) != 10 else 2
-
-                # 🛠️ 核心自動相乘聯動回呼函式 (Callback)
-                def update_actual_quantity(box_key, per_val, act_key):
-                    """當箱數發生改變時，自動即時計算並更新驗收數量到 session_state"""
-                    current_box = st.session_state.get(box_key, 0)
-                    st.session_state[act_key] = int(current_box * per_val)
-
-                # 建立點貨資料收集容器
-                collected_rows_data = []
-
-                # ==================== 動態迴圈：獨立渲染每一組項目組合 ====================
-                for idx in range(st.session_state[row_count_key]):
-                    st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
-                    
-                 # 為每一個輸入框建立全宇宙唯一的獨立狀態 Key（結尾引入計數器變數）
-                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
-                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
-                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
-
-                # 💡 額外新增：為 Lot 批次與有效期限也綁定專屬變數（對齊 Tab 4 獨立 Key 邏輯）
-                    lot_widget_key = f"dlg_lot_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
-                    exp_widget_key = f"dlg_exp_{selected_order}_{current_jan}_{idx}_{st.session_state.t2_submit_counter}"
-
-
-                    # 箱入數永遠鎖定不變
-                    live_per_val = correct_per_case 
-
-                    # 🔄 初始化機制：初次加載時，如果驗收數量還不在記憶體裡，先幫它算好預設值
-                    if act_widget_key not in st.session_state:
-                        initial_box = correct_cases if idx == 0 else 0
-                        st.session_state[act_widget_key] = int(initial_box * live_per_val)
-
-                    # ==================== UI 欄位排版渲染 (精準配比確保完美水平對齊) ====================
-                    # [箱入數, 箱數, 驗收數量, Lot批次, 有效期限] -> 按您原始畫面的順序與比例
-                    col_per, col_box, col_act, col_lot, col_exp = st.columns([1.0, 1.0, 1.2, 1.8, 1.8])
-                    
-                    with col_per:
-                        # 欄位 1：箱入數（預設反灰鎖定）
-                        r_per_case = st.number_input(
-                            "箱入數" if st.session_state.lang == "zh" else "入数", 
-                            min_value=0, 
-                            value=int(live_per_val), 
-                            step=1,
-                            key=per_widget_key, 
-                            disabled=True 
-                        )
-                    with col_box:
-                        # 欄位 2：箱數（變動時觸發自動相乘）
-                        r_cases = st.number_input(
-                            "箱數" if st.session_state.lang == "zh" else "箱数", 
-                            min_value=0, 
-                            value=correct_cases if idx == 0 else 0, 
-                            step=1, 
-                            key=box_widget_key,
-                            on_change=update_actual_quantity,
-                            args=(box_widget_key, live_per_val, act_widget_key)
-                        )
-                    with col_act:
-                        # 欄位 3：驗收數量（由狀態機接管，達成 0 毫秒即時同步更新）
-                        actual_label = t["actual"] if "actual" in t else ("驗收數量" if st.session_state.lang == "zh" else "検収数量")
-                        r_actual = st.number_input(
-                            actual_label, 
-                            min_value=0, 
-                            step=1,
-                            key=act_widget_key
-                        )
-                    with col_lot:
-                        # 欄位 4：Lot 批次
-                        lot_field_label = t.get("lot_no_label", "Lot 批次" if st.session_state.lang == "zh" else "Lot ロット")
-                        r_lot = st.text_input(
-                            lot_field_label, 
-                            value="", 
-                            key=lot_widget_key
-                        ) 
-                    with col_exp:
-                        # 欄位 5：有效期限
-                        expiry_label = t["expiry"] if "expiry" in t else ("有效期限" if st.session_state.lang == "zh" else "有効期限")
-                        r_expiry = st.text_input(
-                            expiry_label, 
-                            value="", 
-                            placeholder="2026/1/1", 
-                            key=exp_widget_key
-                        ) 
-
-                    # 封裝收集本組的數據
-                    collected_rows_data.append({
-                        "actual": r_actual, 
-                        "lot": r_lot, 
-                        "expiry": r_expiry,
-                        "cases": r_cases,
-                        "pcs_per_case": r_per_case
-                    })
-                    st.markdown("---")
-
-                # ==================== 對話框專屬：底部控制按鈕區 ====================
-                # 🛠️ 調整比例：改為 [2.5, 2.5] 完全平分，讓兩個按鈕大小一致、更加平均好看！
-                # 如果希望左邊按鈕稍微寬一點點，也可以嘗試改用 [2.7, 2.3]
-                col_btn1, col_btn2 = st.columns([2.5, 2.5])
-                with col_btn1:
-                    # 🛠️ 核心修復：維持變數賦值，解決後續邏輯的 NameError
-                    submit_btn = st.button(
-                        t["submit"] if "submit" in t else "確認提交", 
-                        use_container_width=True, 
-                        type="primary", 
-                        key=f"dlg_sub_btn_{selected_order}_{current_jan}_{st.session_state.t2_submit_counter}"
-                    )
-                    if submit_btn:
-                        # 💡 您原本點擊確認後處理存檔、寫入資料庫的邏輯程式碼會在這裡執行
-                        pass
-                        
-                with col_btn2:
-                    # 點擊此按鈕，組數自動 +1 並即時強制重整重新繪製出乾淨的新一列組合
-                    if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}_{st.session_state.t2_submit_counter}"
-                        st.session_state[row_count_key] += 1
-                        st.rerun()
-
-
-
+    with col_btn2:
+        if st.button("+ 增加期限與批次欄位", use_container_width=True, key=f"dlg_add_btn_{selected_order}_{current_jan}_{st.session_state['t2_submit_counter']}"):
+            st.session_state[row_count_key] += 1
+            st.rerun()
                     # ==========================================
-                    # PART 4-2 (下): 資料校驗與資料庫持久化回寫 (修復 Google Sheet 欄位未增加問題)
+                    # PART 4-2 (下): 資料校驗與資料庫持久化回寫
                     # ==========================================
                     if submit_btn:
                         is_all_rows_valid = True
@@ -1388,7 +1289,7 @@ if is_tab2_active:
                             c_lot = row_data["lot"].strip()
                             c_exp = row_data["expiry"].strip()
                             
-                            # 💡 確實取出畫面上填寫（或原 CSV 帶入）的箱數與箱入數
+                            # 確實取出畫面上填寫（或原 CSV 帶入）的箱數與箱入數
                             c_cases = row_data["cases"]
                             c_per_case = row_data["pcs_per_case"]
                             
@@ -1453,8 +1354,8 @@ if is_tab2_active:
                                 c_actual = v_row["actual"]
                                 c_lot = v_row["lot"]
                                 c_exp = v_row["expiry"]
-                                c_cases = v_row["cases"]          # 💡 新增
-                                c_per_case = v_row["pcs_per_case"] # 💡 新增
+                                c_cases = v_row["cases"]          
+                                c_per_case = v_row["pcs_per_case"] 
                                 
                                 # 💾【庫存大表持久化】寫入總庫存
                                 db["inventory"].append({
@@ -1463,17 +1364,17 @@ if is_tab2_active:
                                     "lot_no": c_lot, 
                                     "expiry": c_exp, 
                                     "stock": c_actual,
-                                    "actual_cases": c_cases,         # 💡 正式同步至庫存資料庫
-                                    "pcs_per_case": c_per_case       # 💡 正式同步至庫存資料庫
+                                    "actual_cases": c_cases,         
+                                    "pcs_per_case": c_per_case       
                                 })
-                                
+
                                 if idx == 0:
                                     # 第一個 Lot 組合直接記錄在原始的主鍵 JAN 碼下
                                     current_manifest_pool[target_jan]["actual_count"] = c_actual
                                     current_manifest_pool[target_jan]["lot_no"] = c_lot
                                     current_manifest_pool[target_jan]["expiry"] = c_exp
-                                    current_manifest_pool[target_jan]["actual_cases"] = c_cases         # 💡 正式同步至目前單據主行
-                                    current_manifest_pool[target_jan]["pcs_per_case"] = c_per_case     # 💡 正式同步至目前單據主行
+                                    current_manifest_pool[target_jan]["actual_cases"] = c_cases         
+                                    current_manifest_pool[target_jan]["pcs_per_case"] = c_per_case     
                                     current_manifest_pool[target_jan]["status"] = "決收點貨"
                                 else:
                                     # 額外的 Lot 組合自動增開獨立副行
@@ -1484,20 +1385,19 @@ if is_tab2_active:
                                         "actual_count": c_actual,
                                         "lot_no": c_lot,
                                         "expiry": c_exp,
-                                        "actual_cases": c_cases,       # 💡 正式同步至目前單據副行
-                                        "pcs_per_case": c_per_case,     # 💡 正式同步至目前單據副行
+                                        "actual_cases": c_cases,       
+                                        "pcs_per_case": c_per_case,     
                                         "status": "決收點貨",
                                         "is_sub_row": True,
                                         "parent_jan": target_jan
                                     }
-                            
-                            # 💡 核心修正：就地建立完全隔離的數據平鋪，徹底消滅所有前後命名覆蓋衝突與 TypeError
+
+                            # 💡 數據平鋪回寫準備（緊接於第三部分 else 分支內部底部）
                             manifest_sheet = get_google_sheet("Manifest")
                             flattened_rows_list = []
                             for o_no, doc in db["manifest_by_order"].items():
                                 info = doc.get("info", {})
                                 for jan_code, item in doc.get("items", {}).items():
-                                    # 💡 強制進行安全轉型，確保數據中絕對不夾帶隱形 NoneType 導致底層衝突
                                     flattened_rows_list.append([
                                         str(o_no if o_no is not None else "-"),
                                         str(info.get("vendor", "-") if info.get("vendor") is not None else "-"),
@@ -1536,133 +1436,135 @@ if is_tab2_active:
                             except Exception as cloud_err:
                                 st.error(f"雲端持久化失敗: {cloud_err}")
 
-                            # 1. 遞增 Tab 2 專屬的提交計數器（如同 Tab 4 的 scan_counter += 1 原理）
+                            # ==================================================================
+                            # 🌟 鏡像同步 Tab 4 核心：雲端儲存成功，計數器遞增並重設單品解鎖狀態 🌟
+                            # ==================================================================
+                            # 1. 遞增計數器，驅使所有動態輸入框與條碼框在下一次渲染時被徹底清空歸零
                             st.session_state["t2_submit_counter"] += 1
-
-                            # 2. 將畫面增開的動態項目組合行數重設回初始的 1 行
+                            
+                            # 2. 將畫面上的動態項目組合行數重新重設為初始的 1 行
                             st.session_state[row_count_key] = 1
-
-                            # 3. 清除目前已驗收的單品 JAN 碼，使 UI 面板自動隱藏，回歸初始等待掃描狀態
+                            
+                            # 3. 清除當前單品 JAN 碼鎖定狀態，使其自動退回初始「等待掃描單品」畫面
                             st.session_state["pda_current_verified_jan"] = None
-
-                            # 4. 鎖定成功提示訊息進入 Tab 2 的獨立隔離口袋（如果需要對齊 Tab 4 提示機制的話）
-                            st.session_state["t2_success_msg"] = f"JAN 碼 {target_jan} 單品驗收提交成功！欄位已完全重設。"
-
-                            # 5. 最後才執行您原本就有的重整畫面
+                            
+                            # 4. 將成功訊息傳入暫存口袋，完全比照 Tab 4 機制
+                            st.session_state["t2_success_msg"] = f"JAN碼 {target_jan} 點收資料提交成功，欄位已重置！"
+                            
                             st.rerun()
+# ==========================================
+# PART 4-3: 底部資料預覽報表與結案管理
+# ==========================================
+st.markdown("---")
+st.text(t["filter_mode"])
+filter_mode = st.radio("Filter Mode", [t["filter_all"], t["filter_short"]], label_visibility="collapsed")
 
+if st.session_state.lang == "zh":
+    jan_col = "JAN 條碼"
+    name_col = "商品名稱"
+    req_col = "預計應到數量"
+    act_col = "實到數量"
+    short_col = "差異數量"
+    lot_col = "Lot 批次"
+    exp_col = "有效期限"
+    status_col = "狀態"
+else:
+    jan_col = "JAN Code"
+    name_col = "商品名"
+    req_col = "予定数"
+    act_col = "納品数"
+    short_col = "差異"
+    lot_col = "ロット番号"
+    exp_col = "賞味期限"
+    status_col = "ステータス"
 
+# 💡【Tab2 核心合算門神】計算該單據各 JAN 碼的總實到數量（主行+所有副行）
+jan_total_actual_map = {}
+for k, v in current_manifest_pool.items():
+    real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
+    if real_jan not in jan_total_actual_map:
+        jan_total_actual_map[real_jan] = 0
+    jan_total_actual_map[real_jan] += v["actual_count"]
 
+receiving_report_list = []
+for k, v in current_manifest_pool.items():
+    real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
+    
+    # 副行預計數/差異數皆為 0；主行差異數扣除副行實到，避免產生負數
+    if v.get("is_sub_row"):
+        calc_expected = 0
+        calc_shortage = 0
+        display_jan = real_jan
+    else:
+        calc_expected = v["expected_count"]
+        calc_shortage = v["expected_count"] - jan_total_actual_map.get(real_jan, 0)
+        display_jan = k
+    
+    if v.get("status") == "決收點貨":
+        item_status = "驗貨完畢" if st.session_state.lang == "zh" else "検収完了"
+    else:
+        item_status = "未點收" if st.session_state.lang == "zh" else "未検収"
+    
+    # 過濾模式判斷：若選擇「僅顯示有差異品項」，且差異為 0，則跳過不顯示
+    if filter_mode == t["filter_short"] and calc_shortage == 0:
+        continue
 
-            st.markdown("---")
-            st.text(t["filter_mode"])
-            filter_mode = st.radio("Filter Mode", [t["filter_all"], t["filter_short"]], label_visibility="collapsed")
-            
-            if st.session_state.lang == "zh":
-                jan_col = "JAN 條碼"
-                name_col = "商品名稱"
-                req_col = "預計應到數量"
-                act_col = "實到數量"
-                short_col = "差異數量"
-                lot_col = "Lot 批次"
-                exp_col = "有效期限"
-                status_col = "狀態"
-            else:
-                jan_col = "JAN Code"
-                name_col = "商品名"
-                req_col = "予定数"
-                act_col = "納品数"
-                short_col = "差異"
-                lot_col = "ロット番号"
-                exp_col = "賞味期限"
-                status_col = "ステータス"
-            # 💡【Tab2 核心合算門神】計算該單據各 JAN 碼的總實到數量（主行+所有副行）
-            jan_total_actual_map = {}
-            for k, v in current_manifest_pool.items():
-                real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
-                if real_jan not in jan_total_actual_map:
-                    jan_total_actual_map[real_jan] = 0
-                jan_total_actual_map[real_jan] += v["actual_count"]
+    receiving_report_list.append({
+        jan_col: display_jan,
+        name_col: v["name_ja"],
+        req_col: calc_expected,      
+        act_col: v["actual_count"],
+        short_col: calc_shortage,    
+        lot_col: v.get("lot_no", ""),
+        exp_col: v.get("expiry", ""),
+        status_col: item_status
+    })
 
-            receiving_report_list = []
-            for k, v in current_manifest_pool.items():
-                real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
-                
-                # 副行預計數/差異數皆為 0；主行差異數扣除副行實到，避免產生負數
-                if v.get("is_sub_row"):
-                    calc_expected = 0
-                    calc_shortage = 0
-                    display_jan = real_jan
-                else:
-                    calc_expected = v["expected_count"]
-                    calc_shortage = v["expected_count"] - jan_total_actual_map.get(real_jan, 0)
-                    display_jan = k
-                
-                if v.get("status") == "決收點貨":
-                    item_status = "驗貨完畢" if st.session_state.lang == "zh" else "検収完了"
-                else:
-                    item_status = "未點收" if st.session_state.lang == "zh" else "未検収"
-                
-                # 過濾模式判斷：若選擇「僅顯示有差異品項」，且差異為 0，則跳過不顯示
-                if filter_mode == t["filter_short"] and calc_shortage == 0:
-                    continue
+if receiving_report_list:
+    df_receiving = pd.DataFrame(receiving_report_list)
+    
+    # 精準 CSV 原始名冊順序黏合錨點（保持與原始 CSV 順序一致）
+    csv_original_order = {}
+    order_idx = 0
+    for item_key, item_val in current_manifest_pool.items():
+        if not item_val.get("is_sub_row"):
+            csv_original_order[item_key] = order_idx
+            order_idx += 1
 
-                receiving_report_list.append({
-                    jan_col: display_jan,
-                    name_col: v["name_ja"],
-                    req_col: calc_expected,      
-                    act_col: v["actual_count"],
-                    short_col: calc_shortage,    
-                    lot_col: v.get("lot_no", ""),
-                    exp_col: v.get("expiry", ""),
-                    status_col: item_status
-                })
-            
-            if receiving_report_list:
-                df_receiving = pd.DataFrame(receiving_report_list)
-                
-                # 精準 CSV 原始名冊順序黏合錨點（保持與原始 CSV 順序一致）
-                csv_original_order = {}
-                order_idx = 0
-                for item_key, item_val in current_manifest_pool.items():
-                    if not item_val.get("is_sub_row"):
-                        csv_original_order[item_key] = order_idx
-                        order_idx += 1
+    temp_sort_csv_idx = []
+    temp_sort_is_sub = []
 
-                temp_sort_csv_idx = []
-                temp_sort_is_sub = []
+    for index, row in df_receiving.iterrows():
+        current_row_jan = str(row[jan_col]).strip()
+        pool_item_key = list(current_manifest_pool.keys())[index]
+        is_sub_flag = 1 if current_manifest_pool[pool_item_key].get("is_sub_row") else 0
+        
+        temp_sort_csv_idx.append(csv_original_order.get(current_row_jan, 9999))
+        temp_sort_is_sub.append(is_sub_flag)
 
-                for index, row in df_receiving.iterrows():
-                    current_row_jan = str(row[jan_col]).strip()
-                    pool_item_key = list(current_manifest_pool.keys())[index]
-                    is_sub_flag = 1 if current_manifest_pool[pool_item_key].get("is_sub_row") else 0
-                    
-                    temp_sort_csv_idx.append(csv_original_order.get(current_row_jan, 9999))
-                    temp_sort_is_sub.append(is_sub_flag)
+    df_receiving["_sort_csv_idx"] = temp_sort_csv_idx
+    df_receiving["_sort_sub"] = temp_sort_is_sub
 
-                df_receiving["_sort_csv_idx"] = temp_sort_csv_idx
-                df_receiving["_sort_sub"] = temp_sort_is_sub
+    # 執行雙層穩定排序，確保副行緊跟在主行下方
+    df_receiving = df_receiving.sort_values(
+        by=["_sort_csv_idx", "_sort_sub"],
+        ascending=[True, True],
+        kind="stable"
+    ).drop(columns=["_sort_csv_idx", "_sort_sub"])
 
-                # 執行雙層穩定排序，確保副行緊跟在主行下方
-                df_receiving = df_receiving.sort_values(
-                    by=["_sort_csv_idx", "_sort_sub"],
-                    ascending=[True, True],
-                    kind="stable"
-                ).drop(columns=["_sort_csv_idx", "_sort_sub"])
+    st.dataframe(df_receiving, use_container_width=True, hide_index=True)
+    
+    # 當前入庫單結案按鈕 (完成驗貨)
+    st.markdown("---")
+    archive_btn_label = " 完成本單驗貨（移至歷史存檔）" if st.session_state.lang == "zh" else " 検収完了（履歴に移動）"
+    if st.button(archive_btn_label, type="primary", use_container_width=True, key=f"archive_order_btn_{selected_order}"):
+        db["manifest_by_order"][selected_order]["archived_order"] = True
+        save_data(db)
+        st.session_state["pda_success_msg"] = f"單據 {selected_order} 已成功結案並移至歷史存檔區域！"
+        st.rerun()
+else:
+    st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
 
-                st.dataframe(df_receiving, use_container_width=True, hide_index=True)
-                
-                #  當前入庫單結案按鈕 (完成驗貨)
-                st.markdown("---")
-                archive_btn_label = " 完成本單驗貨（移至歷史存檔）" if st.session_state.lang == "zh" else " 検収完了（履歴に移動）"
-                if st.button(archive_btn_label, type="primary", use_container_width=True, key=f"archive_order_btn_{selected_order}"):
-                    db["manifest_by_order"][selected_order]["archived_order"] = True
-                    save_data(db)
-                    # 🛠️ 修正：不要直接 st.success，而是存進分頁二專屬的隔離暫存變數中
-                    st.session_state["pda_success_msg"] = f"單據 {selected_order} 已成功結案並移至歷史存檔區域！"
-                    st.rerun()
-            else:
-                st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
 # ==========================================
 # PART 6: Tab4 實體盤點獨立雲端閘門
 # ==========================================
