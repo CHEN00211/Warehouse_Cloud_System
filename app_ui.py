@@ -858,6 +858,9 @@ if is_tab1_active:
                                     str(current_doc.get("archived_order", "False"))
                                 ])
                             
+                    except Exception:
+                        pass
+
                     if rows_to_append:
                         # 1. 增量追加至 Google Sheet Manifest 工作表
                         manifest_sheet.append_rows(rows_to_append)
@@ -887,6 +890,7 @@ if is_tab1_active:
                     st.session_state[row_count_key] = 1
                     st.session_state["pda_current_verified_jan"] = None
                     st.rerun()
+
 
 
 
