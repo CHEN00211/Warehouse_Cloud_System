@@ -1206,12 +1206,27 @@ if is_tab2_active:
             
             def handle_pda_scan_secure():
                 current_key_name = f"pda_input_slot_{selected_order}_{st.session_state.pda_key}"
+                
+                # 🛡️ 安全門神 1：如果因為 rerun 導致這個 key 根本還沒出現在記憶體中，直接結束不處理
+                if current_key_name not in st.session_state:
+                    return
+                    
                 raw_input = st.session_state[current_key_name].strip()
                 
-                # 💡 將 ITF 自動還原成 JAN 碼
+                # 🛡️ 安全門神 2：如果輸入是空的，代表是系統重整，徹底清空狀態並進行攔截
+                if not raw_input:
+                    st.session_state.pda_current_verified_jan = ""
+                    st.session_state.pda_temp_name_ja = ""
+                    st.session_state.pda_temp_expected_count = 0
+                    st.session_state.pda_temp_actual_count = 0
+                    st.session_state.pda_show_dup_warning = False
+                    st.session_state.pda_error_msg = ""
+                    return  # 攔截！不准往下走
+                
+                # 💡 【完美保留】將 ITF 自動還原成 JAN 碼（完全沒被刪掉！）
                 target_jan = itf_to_jan13(raw_input)
                 
-                # 🔒 完美的 16 個空格縮排（相對於 def 有 4 個空格）
+                # 🔒 完美的 16 個空格縮排（繼續執行原本的條碼比對與填值邏輯）
                 if target_jan and current_manifest_pool:
                     if target_jan in current_manifest_pool:
                         item = current_manifest_pool[target_jan]
