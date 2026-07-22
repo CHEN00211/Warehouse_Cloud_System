@@ -863,33 +863,7 @@ if is_tab1_active:
                         except Exception as cloud_err:
                             st.error(f"雲端持久化失敗: {cloud_err}")
 
-                        # 🎯 【注意這裡！】必須跟下方的 st.rerun() 與上方的 try/except 同一條線
-                        # ====================================================
-                        # 🎯 新增：點收成功後，自動清空當前單品欄位狀態
-                        # ====================================================
-                        # 1. 清空當前驗證成功的 JAN 碼與商品資訊暫存
-                        st.session_state.pda_current_verified_jan = ""
-                        st.session_state.pda_temp_name_ja = ""
-                        st.session_state.pda_temp_expected_count = 0
-                        st.session_state.pda_temp_actual_count = 0
-                        st.session_state.pda_show_dup_warning = False
-                        st.session_state.pda_error_msg = ""
-                        # 2. 將列數歸重設為 1 組
-                        if row_count_key in st.session_state:
-                            st.session_state[row_count_key] = 1
-                                
-                        # 3. 🔥 關鍵殺招：將版本號直接 + 1！
-                        # 這會導致下次打開時，所有輸入框的 Key 都是全新生成的，Streamlit 記憶體快取會直接失效歸零！
-                        version_key = f"dlg_version_{selected_order}_{target_jan}"
-                        if version_key in st.session_state:
-                            st.session_state[version_key] += 1
-                        else:
-                            st.session_state[version_key] = 1
-
-                        # 4. 寫入隔離成功訊息並重整
-                        st.session_state["pda_success_msg"] = f"商品 [{target_jan}] 驗收資料提交成功！"
                         st.rerun()
-                        
                         
                     else:
                         st.error(t["err_csv_header"])
@@ -1206,27 +1180,12 @@ if is_tab2_active:
             
             def handle_pda_scan_secure():
                 current_key_name = f"pda_input_slot_{selected_order}_{st.session_state.pda_key}"
-                
-                # 🛡️ 安全門神 1：如果因為 rerun 導致這個 key 根本還沒出現在記憶體中，直接結束不處理
-                if current_key_name not in st.session_state:
-                    return
-                    
                 raw_input = st.session_state[current_key_name].strip()
                 
-                # 🛡️ 安全門神 2：如果輸入是空的，代表是系統重整，徹底清空狀態並進行攔截
-                if not raw_input:
-                    st.session_state.pda_current_verified_jan = ""
-                    st.session_state.pda_temp_name_ja = ""
-                    st.session_state.pda_temp_expected_count = 0
-                    st.session_state.pda_temp_actual_count = 0
-                    st.session_state.pda_show_dup_warning = False
-                    st.session_state.pda_error_msg = ""
-                    return  # 攔截！不准往下走
-                
-                # 💡 【完美保留】將 ITF 自動還原成 JAN 碼（完全沒被刪掉！）
+                # 💡 將 ITF 自動還原成 JAN 碼
                 target_jan = itf_to_jan13(raw_input)
                 
-                # 🔒 完美的 16 個空格縮排（繼續執行原本的條碼比對與填值邏輯）
+                # 🔒 完美的 16 個空格縮排（相對於 def 有 4 個空格）
                 if target_jan and current_manifest_pool:
                     if target_jan in current_manifest_pool:
                         item = current_manifest_pool[target_jan]
@@ -1242,11 +1201,9 @@ if is_tab2_active:
                         
                 # 🔒 key + 1 必須在 if 結束後、函式結束前執行
                 st.session_state.pda_key += 1
-            # 💡 1. 新增：在這裡宣告一個專屬的表單實體物理容器
-            pda_form_container = st.empty()
+
 
             st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
-            
 
             if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
                 st.error(st.session_state.pda_error_msg.replace("！", ""))
@@ -1259,41 +1216,29 @@ if is_tab2_active:
             # PART 4-2 (上): Tab2 確認提交表單與動態欄位生成
             # ==========================================
             if st.session_state.get("pda_current_verified_jan") and st.session_state.get("pda_current_verified_jan") != "ERROR_NOT_FOUND":
-               with pda_form_container.container():
-                    st.markdown("---")
-                    if st.session_state.pda_show_dup_warning:
-                        st.warning(t["dup_warning"].replace("？", "").replace("！", ""))
+                st.markdown("---")
+                if st.session_state.pda_show_dup_warning:
+                    st.warning(t["dup_warning"].replace("？", "").replace("！", ""))
                     
-                    info_df = pd.DataFrame([
-                        {"Item_Key": "JAN Code", "Item_Val": st.session_state.get("pda_current_verified_jan", "")},
-                        {"Item_Key": "商品名", "Item_Val": st.session_state.pda_temp_name_ja},
-                        {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.pda_temp_expected_count)}
-                    ])
+                info_df = pd.DataFrame([
+                    {"Item_Key": "JAN Code", "Item_Val": st.session_state.get("pda_current_verified_jan", "")},
+                    {"Item_Key": "商品名", "Item_Val": st.session_state.pda_temp_name_ja},
+                    {"Item_Key": "預計應到數/予定数", "Item_Val": str(st.session_state.pda_temp_expected_count)}
+                ])
                 
-                    st.dataframe(
-                        info_df,
-                        hide_index=True,
-                        column_config={
-                            "Item_Key": st.column_config.TextColumn(label="", width="medium"),
-                            "Item_Val": st.column_config.TextColumn(label="", width="large")
-                        },
-                        use_container_width=False
-                    )
+                st.dataframe(
+                    info_df,
+                    hide_index=True,
+                    column_config={
+                        "Item_Key": st.column_config.TextColumn(label="", width="medium"),
+                        "Item_Val": st.column_config.TextColumn(label="", width="large")
+                    },
+                    use_container_width=False
+                )
                 
                 # ==================== 全新對話框架構：核心變數綁定 ====================
                 current_jan = str(st.session_state.get("pda_current_verified_jan", "DEFAULT"))
                 row_count_key = f"dlg_rows_{selected_order}_{current_jan}"
-
-               # 💡 1. 新增：確保對話框有一個專屬的版本號（用來強制洗掉快取）
-                version_key = f"dlg_version_{selected_order}_{current_jan}"
-                if version_key not in st.session_state:
-                    st.session_state[version_key] = 0
-                current_version = st.session_state[version_key] # 取得當前版本
-
-                # 確保一打開預設絕對只有 1 行
-                if row_count_key not in st.session_state:
-                    st.session_state[row_count_key] = 1
-                
                 
                 # 確保一打開預設絕對只有 1 行，按按鈕才增加
                 if row_count_key not in st.session_state:
@@ -1322,12 +1267,10 @@ if is_tab2_active:
                 for idx in range(st.session_state[row_count_key]):
                     st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                     
-                    # 💡 2. 核心修改：在所有 Widget Key 的結尾全部加上 _{current_version}
-                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}_{current_version}"
-                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}_{current_version}"
-                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}_{current_version}"
-                    lot_widget_key = f"dlg_lot_{selected_order}_{current_jan}_{idx}_{current_version}"
-                    exp_widget_key = f"dlg_exp_{selected_order}_{current_jan}_{idx}_{current_version}"
+                    # 為每一個輸入框建立全宇宙唯一的獨立狀態 Key
+                    box_widget_key = f"dlg_box_widget_{selected_order}_{current_jan}_{idx}"
+                    per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}"
+                    act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
 
                     # 箱入數永遠鎖定不變
                     live_per_val = correct_per_case 
@@ -1584,24 +1527,6 @@ if is_tab2_active:
                                         manifest_sheet.append_rows(values_to_write)
                             except Exception as cloud_err:
                                 st.error(f"雲端持久化失敗: {cloud_err}")
-                            # ====================================================
-                            # 🎯 終極修正：直接在實體物理層面上，將整個區塊徹底抹除
-                            # ====================================================
-                            # 1. 🔥 關鍵殺招：直接呼叫空容器的清空方法，瞬間洗掉所有輸入元件
-                            pda_form_container.empty()
-                            
-                            # 2. 照常將狀態機的所有暫存變數歸零，防止後台記憶體殘留
-                            st.session_state.pda_current_verified_jan = ""
-                            st.session_state.pda_temp_name_ja = ""
-                            st.session_state.pda_temp_expected_count = 0
-                            st.session_state.pda_temp_actual_count = 0
-                            st.session_state.pda_show_dup_warning = False
-                            st.session_state.pda_error_msg = ""
-                            
-                            if row_count_key in st.session_state:
-                                st.session_state[row_count_key] = 1
-
-                            st.session_state["pda_success_msg"] = f"🎉 商品 [{target_jan}] 驗收資料提交成功！"                               
 
                             st.rerun()
 
