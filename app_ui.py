@@ -764,43 +764,50 @@ if is_tab1_active:
                     df_upload = pd.read_csv(uploaded_file, dtype={"jan_code": str})
                     required_cols = ["jan_code", "name_ja", "expected_count", "expected_cases", "pcs_per_case"]
                     
+              
                     if all(col in df_upload.columns for col in required_cols):
                         
                         # ==================================================================
-                        # 🌟 終極修復：掃描雲端大表，確保單號永遠遞增、絕不回頭、不覆蓋 🌟
+                        # 🌟 終極修正：雲端永續計數器（徹底解決網頁重整、全刪資料導致 001 的問題）🌟
                         # ==================================================================
-                        # 1. 取得當前日期的月日作為單號前綴（例如 0722）
                         today_mmdd = datetime.date.today().strftime("%m%d")
-                        max_seq = 0
-
+                        current_highest_seq = 0
+                        
                         try:
-                            # 2. 直接拉取雲端最新的 Manifest 總表進行實時動態掃描
-                            manifest_sheet = get_google_sheet("Manifest")
-                            all_records = manifest_sheet.get_all_records()
+                            # 1. 連線到我們剛剛建立的雲端專屬設定工作表
+                            settings_sheet = get_google_sheet("System_Settings")
                             
-                            # 3. 遍歷雲端所有資料，精準過濾並抓出當天歷史最高流水號
-                            for rec in all_records:
-                                existing_order = str(rec.get("order_no", "")).strip()
-                                # 只有當單號是以今天的月日開頭，且長度為 7 碼時（例如 0722003）才進行比對
-                                if existing_order.startswith(today_mmdd) and len(existing_order) == 7:
-                                    try:
-                                        # 擷取後三碼流水號並轉換成數字進行極值比對
-                                        seq_num = int(existing_order[4:])
-                                        if seq_num > max_seq:
-                                            max_seq = seq_num
-                                    except ValueError:
-                                        pass
-                        except Exception as cloud_scan_err:
-                            # 備援防禦：若讀取失敗則保留安全起點
-                            pass
+                            # 2. 讀取目前儲存在雲端的絕對歷史最大序號 (讀取 A1 儲存格)
+                            cell_value = settings_sheet.acell("A1").value
+                            if cell_value and str(cell_value).isdigit():
+                                current_highest_seq = int(cell_value)
+                        except Exception as settings_err:
+                            # 如果讀取失敗，安全降級使用 0
+                            current_highest_seq = 0
 
-                        # 4. 核心黃金定律：下一個新單號 = 歷史最大流水號 + 1（管你 001 有沒有被刪除）
-                        new_seq_num = max_seq + 1
+                        # 3. 永遠在雲端歷史最大值的基礎上 + 1 (管你網頁怎麼重整、Manifest 怎麼刪，這裡絕不回頭)
+                        new_seq_num = current_highest_seq + 1
+                        
+                        try:
+                            # 4. 立刻把最新吐出來的號碼，強行寫回雲端 A1 卡死，幫下一張單據排隊
+                            settings_sheet.update("A1", [[new_seq_num]])
+                        except Exception as update_settings_err:
+                            # 舊版 gspread 備援語法
+                            try:
+                                settings_sheet.update(range_name="A1", values=[[new_seq_num]])
+                            except:
+                                pass
+                        
+                        # 5. 結合今日日期，組裝成絕對唯一的遞增單號
                         auto_order_no = f"{today_mmdd}{new_seq_num:03d}"
                         # ==================================================================
                         
                         current_time_str = datetime.datetime.now().strftime("%Y/%m/%d")
                         
+                        # 確保本地 db 結構存在，防範未初始化報錯
+                        if "manifest_by_order" not in db:
+                            db["manifest_by_order"] = {}
+                            
                         db["manifest_by_order"][auto_order_no] = {
                             "info": {
                                 "upload_date": current_time_str,
@@ -813,6 +820,7 @@ if is_tab1_active:
                         
                         for _, row in df_upload.iterrows():
                             jan_key = str(row["jan_code"]).strip()
+
 
                             
 # 💡 安全轉型：提取 CSV 中的箱數與箱入數並轉為整數型態
