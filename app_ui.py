@@ -1107,16 +1107,6 @@ if "t2_success_msg" in st.session_state and st.session_state["t2_success_msg"]:
 if "t2_submit_counter" not in st.session_state:
     st.session_state["t2_submit_counter"] = 0
 
-# ==========================================
-# 原有邏輯：商品狀態與變數賦值（完全保留，不刪減）
-# ==========================================
-st.session_state.pda_temp_actual_count = item["expected_count"]
-st.session_state.pda_show_dup_warning = (item.get("status") == "決收點貨" or item.get("status") == "已點收驗收")
-st.session_state.pda_error_msg = ""
-else:
-    st.session_state.pda_current_verified_jan = "ERROR_NOT_FOUND"
-    st.session_state.pda_error_msg = t["jan_not_found"]
-
 # key + 1 必須在 if 結束後、函式結束前執行
 st.session_state.pda_key += 1
 
@@ -1134,6 +1124,7 @@ if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
     st.session_state.pda_temp_expected_count = 0
     st.session_state.pda_temp_actual_count = 0
     st.session_state.pda_show_dup_warning = False
+
 # ==========================================
 # PART 4-2 (上): Tab2 確認提交表單與動態欄位生成
 # ==========================================
