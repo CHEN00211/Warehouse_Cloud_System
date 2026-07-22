@@ -856,20 +856,22 @@ if is_tab1_active:
                                     str(c_cases),
                                     "決收點貨",
                                     str(current_doc.get("archived_order", "False"))
-                                ])
-                            
-                    except Exception:
-                        pass
+                            ])
 
-                    if rows_to_append:
-                        # 1. 增量追加至 Google Sheet Manifest 工作表
-                        manifest_sheet.append_rows(rows_to_append)
-                        
-                        # 🔒 核心持久化修復：立刻同步鎖死回資料庫檔案，防止重整後被沖掉
-                        if "save_data" in globals():
-                            save_data(db)
-                        elif "save_db" in globals():
-                            save_db(db)
+                        # 🔒 完美對齊第 836 行的幽靈 try 閘門，將其在此精準閉環！
+                        try:
+                            if rows_to_append:
+                                # 1. 增量追加至 Google Sheet Manifest 工作表
+                                manifest_sheet.append_rows(rows_to_append)
+                                
+                                # 🔒 核心持久化修復：立刻同步鎖死回資料庫檔案，防止重整後被沖掉
+                                if "save_data" in globals():
+                                    save_data(db)
+                                elif "save_db" in globals():
+                                    save_db(db)
+                                    
+                        except Exception as cloud_err:
+                            st.error(f"雲端持久化失敗: {cloud_err}")
 
                     # ==================================================================
                     # 🌟 元件清空閘門：儲存成功後，迴圈 del 徹底清除本單品輸入框的殘留快取
@@ -890,9 +892,6 @@ if is_tab1_active:
                     st.session_state[row_count_key] = 1
                     st.session_state["pda_current_verified_jan"] = None
                     st.rerun()
-
-
-
 
                         
                     else:
