@@ -1814,6 +1814,61 @@ if is_tab2_active:
             else:
                 st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
 
+# ==================================================================
+# 🚨 臨時救援工具：一鍵強行將本單所有品項（含舊資料）重刷進 Google Sheet
+# ==================================================================
+st.markdown("### ⚠️ 雲端資料同步工具")
+if st.button("🔥 點擊此處：強行將本單所有項目重刷回 Google Sheet", use_container_width=True):
+    try:
+        rescue_sheet = get_google_sheet("Manifest")
+        rescue_header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
+        
+        # 1. 抓取當前雲端現狀並剔除本單
+        cloud_raw = rescue_sheet.get_all_values()
+        rescue_list = []
+        if len(cloud_raw) > 1:
+            for row in cloud_raw[1:]:
+                if len(row) < len(rescue_header):
+                    row += [""] * (len(rescue_header) - len(row))
+                # 如果不是這張單，就保留
+                if str(row[0]).strip() != str(selected_order) and str(row[0]).strip() != "" and str(row[0]).strip() != "-":
+                    rescue_list.append([str(cell) for cell in row[:len(rescue_header)]])
+        
+        # 2. 強行把我這張單據目前在 db 裡的所有品項（包含您之前上傳、電腦看得到的正常資料）全部撈出來
+        rescue_doc = db["manifest_by_order"].get(selected_order, {})
+        rescue_info = rescue_doc.get("info", {})
+        
+        for j_code, item_obj in rescue_doc.get("items", {}).items():
+            # 💡 這裡會把我這張單不論新舊、只要在 db 裡的名冊全部打包
+            rescue_list.append([
+                str(selected_order if selected_order is not None else "-"),
+                str(rescue_info.get("vendor", "-")),
+                str(rescue_info.get("expected_delivery", "-")),
+                str(rescue_info.get("operator", "-")),
+                str(j_code),
+                str(item_obj.get("name_ja", "-")),
+                str(item_obj.get("lot_no", "")),   # 剛剛沒上去的舊 lot 
+                str(item_obj.get("expiry", "")),   # 剛剛沒上去的舊有效期限
+                str(item_obj.get("expected_count", 0)),
+                str(item_obj.get("actual_count", 0)),
+                str(item_obj.get("expected_cases", 0)),
+                str(item_obj.get("pcs_per_case", 0)),
+                str(item_obj.get("actual_cases", 0)),
+                str(item_obj.get("status", "未點收")),
+                str(rescue_doc.get("archived_order", "False"))
+            ])
+            
+        # 3. 擦乾淨雲端，全量射入
+        rescue_sheet.clear()
+        write_values = [rescue_header] + rescue_list
+        rescue_sheet.update(write_values, "A1")
+        
+        st.success("🎉 本單的所有原始名冊與點收資料已成功強制重刷回 Google Sheet 囉！請去查看雲端！")
+        st.rerun()
+    except Exception as e:
+        st.error(f"救援失敗: {e}")
+# ==================================================================
+
 
 # ==========================================
 # PART 6: Tab4 實體盤點獨立雲端閘門
