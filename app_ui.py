@@ -1336,7 +1336,7 @@ if is_tab2_active:
                     per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}"
                     act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
 
-                    # 💡 終極修正 1：不要交給複雜的公式！直接撈出最真實的 CSV 商品規格
+                    # 💡 終極修正 1：撈出最真實的 CSV 商品規格
                     # 優先從 db_item 拿 pcs_per_case，如果拿到 0、10、或空值，全部強制保底為 1
                     raw_csv_per_case = db_item.get("pcs_per_case", 1)
                     if raw_csv_per_case is None or int(raw_csv_per_case) in:
@@ -1344,15 +1344,13 @@ if is_tab2_active:
                     else:
                         final_per_val = int(raw_csv_per_case)
 
-                    # 💡 終極修正 2：根據箱入數，算出絕對正確的預期箱數
-                    # 總數 5 / 箱入數 1 = 5 箱
+                    # 💡 終極修正 2：根據精準的箱入數，算出絕對正確的預期箱數
                     if final_per_val > 0:
                         final_box_val = total_expected // final_per_val
                     else:
                         final_box_val = total_expected
 
-                    # ⚡ 終極修正 3：【最強防禦】強制用正確的數值洗掉 Streamlit 頑固的舊快取記憶體
-                    # 這樣做能確保不論電腦還是 PDA，只要重新整理或初次載入，數字絕對不可能錯亂！
+                    # ⚡ 終極修正 3：【記憶體強制清洗】強行用正確的數值覆寫 Streamlit 的舊快取暫存
                     st.session_state[per_widget_key] = int(final_per_val)
                     st.session_state[box_widget_key] = int(final_box_val if idx == 0 else 0)
                     st.session_state[act_widget_key] = int(st.session_state[box_widget_key] * st.session_state[per_widget_key])
@@ -1366,7 +1364,7 @@ if is_tab2_active:
                         r_per_case = st.number_input(
                             "箱入數" if st.session_state.lang == "zh" else "入数", 
                             min_value=0, 
-                            value=int(st.session_state[per_widget_key]), # 💡 死死綁定剛剛洗乾淨的記憶體
+                            value=int(st.session_state[per_widget_key]), 
                             step=1,
                             key=per_widget_key, 
                             disabled=True 
@@ -1376,11 +1374,11 @@ if is_tab2_active:
                         r_cases = st.number_input(
                             "箱數" if st.session_state.lang == "zh" else "箱数", 
                             min_value=0, 
-                            value=int(st.session_state[box_widget_key]), # 💡 死死綁定剛剛洗乾淨的記憶體
+                            value=int(st.session_state[box_widget_key]), 
                             step=1, 
                             key=box_widget_key,
                             on_change=update_actual_quantity,
-                            args=(box_widget_key, final_per_val, act_widget_key) # 💡 傳入洗乾淨的正確箱入數
+                            args=(box_widget_key, final_per_val, act_widget_key)
                         )
 
             
