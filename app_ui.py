@@ -1233,30 +1233,63 @@ if is_tab2_active:
                 
                 # 💡 將 ITF 自動還原成 JAN 碼
                 target_jan = itf_to_jan13(raw_input)
-                
-                # 🔒 核心安全修正：將刷入的條碼強制轉為乾淨去空格的字串型態，防止型態誤判
                 clean_target_jan = str(target_jan).strip() if target_jan else ""
                 
-                if clean_target_jan and current_manifest_pool:
-                    # 💡 建立一個全部都去空格的字串 Key 對照表，確保不論如何百分之百能比對成功
-                    normalized_pool_keys = [str(k).strip() for k in current_manifest_pool.keys()]
-                    
-                    if clean_target_jan in normalized_pool_keys:
-                        # 找到對應的商品項目
-                        # 考慮到可能會有型態不同的問題，精準撈取
-                        matched_key = [k for k in current_manifest_pool.keys() if str(k).strip() == clean_target_jan][0]
-                        item = current_manifest_pool[matched_key]
+                if clean_target_jan:
+                    # 1. ⚡ 實時向最新的雲端大表（Google Sheet）核對當前單據的最新點收現狀
+                    try:
+                        manifest_sheet = get_google_sheet("Manifest")
+                        cloud_values = manifest_sheet.get_all_values()
+                        header_cols = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
                         
-                        st.session_state.pda_current_verified_jan = clean_target_jan
-                        st.session_state.pda_temp_name_ja = item.get("name_ja", "-")
-                        st.session_state.pda_temp_expected_count = item.get("expected_count", 0)
-                        st.session_state.pda_temp_actual_count = item.get("expected_count", 0)  
-                        st.session_state.pda_show_dup_warning = (item.get("status") in ["決收點貨", "已點收驗收", "驗貨完畢"])
-                        st.session_state.pda_error_msg = ""
-                    else:
-                        st.session_state.pda_current_verified_jan = "ERROR_NOT_FOUND"
-                        st.session_state.pda_error_msg = t["jan_not_found"]
+                        cloud_item = None
+                        is_already_verified_on_cloud = False
                         
+                        if len(cloud_values) > 1:
+                            for row in cloud_values[1:]:
+                                if len(row) < len(header_cols):
+                                    row += [""] * (len(header_cols) - len(row))
+                                
+                                # 如果單號相符 且 JAN 碼相符
+                                if str(row[0]).strip() == str(selected_order).strip() and str(row[4]).strip() == clean_target_jan:
+                                    cloud_item = row
+                                    # 💡 檢查這個品項在雲端是不是已經被點收過了
+                                    if str(row[13]).strip() in ["決收點貨", "驗貨完畢", "數量有差異", "検収完了", "数量差異あり"]:
+                                        is_already_verified_on_cloud = True
+                                        
+                        # 2. 🧩 依據雲端實時現狀，進行核心狀態機判定
+                        if cloud_item is not None:
+                            # 🎯 A 狀況：商品在清單內
+                            st.session_state.pda_current_verified_jan = clean_target_jan
+                            st.session_state.pda_temp_name_ja = str(cloud_item[5]) # 商品名稱
+                            st.session_state.pda_temp_expected_count = int(cloud_item[8]) if str(cloud_item[8]).isdigit() else 0
+                            st.session_state.pda_temp_actual_count = int(cloud_item[8]) if str(cloud_item[8]).isdigit() else 0
+                            
+                            # 💡 核心修正：如果雲端顯示已驗貨，這裡百分之百強制開啟「重複點貨」警告！
+                            st.session_state.pda_show_dup_warning = is_already_verified_on_cloud
+                            st.session_state.pda_error_msg = ""
+                        else:
+                            # 🎯 B 狀況：商品真的不在清單內
+                            st.session_state.pda_current_verified_jan = "ERROR_NOT_FOUND"
+                            st.session_state.pda_error_msg = t["jan_not_found"]
+                            st.session_state.pda_show_dup_warning = False
+                            
+                    except Exception as e:
+                        # 備援：若直連雲端失敗，吃本地 db 結構
+                        if clean_target_jan in current_manifest_pool:
+                            item = current_manifest_pool[clean_target_jan]
+                            st.session_state.pda_current_verified_jan = clean_target_jan
+                            st.session_state.pda_temp_name_ja = item["name_ja"]
+                            st.session_state.pda_temp_expected_count = item["expected_count"]
+                            st.session_state.pda_temp_actual_count = item["expected_count"]  
+                            st.session_state.pda_show_dup_warning = (item.get("status") in ["決收點貨", "已點收驗收", "驗貨完畢"])
+                            st.session_state.pda_error_msg = ""
+                        else:
+                            st.session_state.pda_current_verified_jan = "ERROR_NOT_FOUND"
+                            st.session_state.pda_error_msg = t["jan_not_found"]
+                            st.session_state.pda_show_dup_warning = False
+                            
+                # 🔒 key + 1 結束函式
                 st.session_state.pda_key += 1
 
 
