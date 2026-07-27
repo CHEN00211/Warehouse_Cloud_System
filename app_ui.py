@@ -1152,6 +1152,13 @@ if is_tab1_active:
 # ==========================================
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
 # ==========================================
+# ==========================================
+# 💡 擋煞閘門：如果有存過就吃記憶體，按下確認提交才重新拉取
+# ==========================================
+if "cloud_manifest_cache" not in st.session_state or st.session_state.get("need_refresh_cloud_cache", False):
+    st.session_state["cloud_manifest_cache"] = get_google_sheet("Manifest").get_all_values()
+    st.session_state["need_refresh_cloud_cache"] = False
+
 if is_tab2_active:
     # 🛠️ 檢查分頁二專屬的成功訊息，絕對不與 tab1, tab4 混用
     if "pda_success_msg" in st.session_state and st.session_state["pda_success_msg"]:
@@ -1239,7 +1246,7 @@ if is_tab2_active:
                     # 1. ⚡ 實時向最新的雲端大表（Google Sheet）核對當前單據的最新點收現狀
                     try:
                         manifest_sheet = get_google_sheet("Manifest")
-                        cloud_values = manifest_sheet.get_all_values()
+                        cloud_values = st.session_state["cloud_manifest_cache"]
                         header_cols = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
                         
                         cloud_item = None
@@ -1640,7 +1647,7 @@ if is_tab2_active:
                                     
                                 # 1. ⚡ 實時拉取雲端當前最真實的整張大表
                                 try:
-                                    cloud_values = manifest_sheet.get_all_values()
+                                    cloud_values = st.session_state["cloud_manifest_cache"]
                                 except Exception:
                                     cloud_values = []
                                         
@@ -1739,6 +1746,7 @@ if is_tab2_active:
                             st.session_state["pda_current_verified_jan"] = None
                             
                             # 5. 🚀 萬事俱備，強制重整網頁
+                            st.session_state["need_refresh_cloud_cache"] = True
                             st.rerun()
 
             st.markdown("---")
