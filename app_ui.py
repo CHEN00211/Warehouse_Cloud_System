@@ -1650,13 +1650,12 @@ if is_tab2_active:
                                 st.error(f"雲端持久化失敗: {cloud_err}")
 
                             # ==================================================================
-
-
-
-
+                            # 🌟【全新修正：欄位深度自動清空與本地同步】在 Rerun 前夕，強行清除與存檔 🌟
                             # ==================================================================
-                            # 🌟【全新修正：欄位深度自動清空】在 Rerun 前夕，強行清除輸入框記憶體殘留 🌟
-                            # ==================================================================
+                            # 💡 核心修正：在重整畫面的前一刻，立刻將剛剛更新的本地 db 存檔！
+                            # 這樣重整後，電腦底下的 DataFrame 報表就能立刻讀到最新點收的 Lot、日期與數量！
+                            save_data(db)
+
                             # 1. 精準取得作業員在畫面上剛剛生成的總項目組合組數
                             current_total_rows = st.session_state.get(row_count_key, 1)
                             
@@ -1665,7 +1664,7 @@ if is_tab2_active:
                                 keys_to_clean = [
                                     f"dlg_box_widget_{selected_order}_{current_jan}_{row_idx}",
                                     f"dlg_per_widget_{selected_order}_{current_jan}_{row_idx}",
-                                    f"dlg_act_widget_{selected_order}_{current_jan}_{row_idx}",
+                                    f"dlg_act_widget_{selected_order}_{current_jan}_{idx}",
                                     f"dlg_lot_{selected_order}_{current_jan}_{row_idx}",
                                     f"dlg_exp_{selected_order}_{current_jan}_{row_idx}"
                                 ]
@@ -1679,7 +1678,9 @@ if is_tab2_active:
                             # 4. 解除單品鎖定狀態，回歸最初等待 PDA 盲刷條碼的乾淨狀態
                             st.session_state["pda_current_verified_jan"] = None
                             
+                            # 5. 🚀 萬事俱備，強制重整網頁
                             st.rerun()
+
             st.markdown("---")
             st.text(t["filter_mode"])
             filter_mode = st.radio("Filter Mode", [t["filter_all"], t["filter_short"]], label_visibility="collapsed")
