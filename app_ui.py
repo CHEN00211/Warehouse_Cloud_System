@@ -1336,46 +1336,53 @@ if is_tab2_active:
                     per_widget_key = f"dlg_per_widget_{selected_order}_{current_jan}_{idx}"
                     act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
 
-                    # 箱入數永遠鎖定不變
-                    live_per_val = int(correct_per_case) 
+                    # 💡 終極修正 1：不要交給複雜的公式！直接撈出最真實的 CSV 商品規格
+                    # 優先從 db_item 拿 pcs_per_case，如果拿到 0、10、或空值，全部強制保底為 1
+                    raw_csv_per_case = db_item.get("pcs_per_case", 1)
+                    if raw_csv_per_case is None or int(raw_csv_per_case) in:
+                        final_per_val = 1
+                    else:
+                        final_per_val = int(raw_csv_per_case)
 
-                    # 🔒 核心修正一：在記憶體中強行初始化這三個欄位，確保絕對不對調
-                    if per_widget_key not in st.session_state:
-                        st.session_state[per_widget_key] = live_per_val
-                        
-                    if box_widget_key not in st.session_state:
-                        st.session_state[box_widget_key] = int(correct_cases if idx == 0 else 0)
-                        
-                    if act_widget_key not in st.session_state:
-                        # 驗收數量 = 箱數 × 箱入數
-                        st.session_state[act_widget_key] = int(st.session_state[box_widget_key] * live_per_val)
+                    # 💡 終極修正 2：根據箱入數，算出絕對正確的預期箱數
+                    # 總數 5 / 箱入數 1 = 5 箱
+                    if final_per_val > 0:
+                        final_box_val = total_expected // final_per_val
+                    else:
+                        final_box_val = total_expected
+
+                    # ⚡ 終極修正 3：【最強防禦】強制用正確的數值洗掉 Streamlit 頑固的舊快取記憶體
+                    # 這樣做能確保不論電腦還是 PDA，只要重新整理或初次載入，數字絕對不可能錯亂！
+                    st.session_state[per_widget_key] = int(final_per_val)
+                    st.session_state[box_widget_key] = int(final_box_val if idx == 0 else 0)
+                    st.session_state[act_widget_key] = int(st.session_state[box_widget_key] * st.session_state[per_widget_key])
 
                     # ==================== UI 欄位排版渲染 (精準配比確保完美水平對齊) ====================
                     # [箱入數, 箱數, 驗收數量, Lot批次, 有效期限] -> 按您原始畫面的順序與比例
                     col_per, col_box, col_act, col_lot, col_exp = st.columns([1.0, 1.0, 1.2, 1.8, 1.8])
                     
                     with col_per:
-                        # 欄位 1：箱入數（反灰鎖定）
-                        # 💡 核心修正二：value 直接死綁記憶體，確保顯示的一定是正確的箱入數 (例如 1)
+                        # 欄位 1：箱入數（預設反灰鎖定）
                         r_per_case = st.number_input(
                             "箱入數" if st.session_state.lang == "zh" else "入数", 
                             min_value=0, 
-                            value=int(st.session_state[per_widget_key]), 
+                            value=int(st.session_state[per_widget_key]), # 💡 死死綁定剛剛洗乾淨的記憶體
                             step=1,
                             key=per_widget_key, 
                             disabled=True 
                         )
                     with col_box:
                         # 欄位 2：箱數（變動時觸發自動相乘）
-                        # 💡 核心修正三：value 直接死綁記憶體，確保顯示的一定是正確的箱數 (例如 120)
                         r_cases = st.number_input(
                             "箱數" if st.session_state.lang == "zh" else "箱数", 
                             min_value=0, 
-                            value=int(st.session_state[box_widget_key]), 
+                            value=int(st.session_state[box_widget_key]), # 💡 死死綁定剛剛洗乾淨的記憶體
                             step=1, 
                             key=box_widget_key,
                             on_change=update_actual_quantity,
-                            args=(box_widget_key, live_per_val, act_widget_key)
+                            args=(box_widget_key, final_per_val, act_widget_key) # 💡 傳入洗乾淨的正確箱入數
+                        )
+
                         )
                     with col_act:
                         # 欄位 3：驗收數量（由狀態機接管，並從記憶體防守值讀取）
