@@ -1339,7 +1339,10 @@ if is_tab2_active:
                     # 💡 終極修正 1：撈出最真實的 CSV 商品規格
                     # 優先從 db_item 拿 pcs_per_case，如果拿到 0、10、或空值，全部強制保底為 1
                     raw_csv_per_case = db_item.get("pcs_per_case", 1)
-                    if raw_csv_per_case is None or int(raw_csv_per_case) in:
+                    
+                    if raw_csv_per_case is None:
+                        final_per_val = 1
+                    elif int(raw_csv_per_case) == 0 or int(raw_csv_per_case) == 10:
                         final_per_val = 1
                     else:
                         final_per_val = int(raw_csv_per_case)
