@@ -1571,77 +1571,78 @@ if is_tab2_active:
                             # 💡 核心修正：就地建立完全隔離的數據平鋪，徹底消滅所有前後命名覆蓋衝突與 TypeError
                             manifest_sheet = get_google_sheet("Manifest")
                             flattened_rows_list = []
-                                # ==================================================================
-                                # 🌟 多人安全併發修正：精準單號隔離平鋪覆寫（徹底消滅無限增生 Bug）🌟
-                                # ==================================================================
+                            # ==================================================================
+                            # 🌟 多人安全併發修正：精準單號隔離平鋪覆寫（徹底消滅無限增生 Bug）🌟
+                            # ==================================================================
+                            try:
+                                manifest_sheet = get_google_sheet("Manifest")
+                                header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
+                                    
+                                # 1. ⚡ 實時拉取雲端當前最真實的整張大表
                                 try:
-                                    manifest_sheet = get_google_sheet("Manifest")
-                                    header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
-                                    
-                                    # 1. ⚡ 實時拉取雲端當前最真實的整張大表
-                                    try:
-                                        cloud_values = manifest_sheet.get_all_values()
-                                    except Exception:
-                                        cloud_values = []
+                                    cloud_values = manifest_sheet.get_all_values()
+                                except Exception:
+                                    cloud_values = []
                                         
-                                    if len(cloud_values) > 1:
-                                        # 💡 核心對齊：確保 DataFrame 的 columns 百分之百精準對齊自訂的 header
-                                        df_cloud = pd.DataFrame(cloud_values[1:], columns=header)
+                                if len(cloud_values) > 1:
+                                    # 💡 核心對齊：確保 DataFrame 的 columns 百分之百精準對齊自訂的 header
+                                    df_cloud = pd.DataFrame(cloud_values[1:], columns=header)
                                         
-                                        # 💡 核心修正一：直接把「目前這張單據 (selected_order)」以及所有「空白無效行」從雲端記憶體中徹底蒸發
-                                        df_cloud = df_cloud[
-                                            (df_cloud["order_no"].astype(str).str.strip() != str(selected_order)) & 
-                                            (df_cloud["order_no"].astype(str).str.strip() != "") & 
-                                            (df_cloud["order_no"].astype(str).str.strip() != "-")
-                                        ]
-                                        final_flattened_rows_list = df_cloud.values.tolist()
-                                    else:
-                                        final_flattened_rows_list = []
+                                    # 💡 核心修正一：直接把「目前這張單據 (selected_order)」以及所有「空白無效行」從雲端記憶體中徹底蒸發
+                                    df_cloud = df_cloud[
+                                        (df_cloud["order_no"].astype(str).str.strip() != str(selected_order)) & 
+                                        (df_cloud["order_no"].astype(str).str.strip() != "") & 
+                                        (df_cloud["order_no"].astype(str).str.strip() != "-")
+                                    ]
+                                    final_flattened_rows_list = df_cloud.values.tolist()
+                                else:
+                                    final_flattened_rows_list = []
 
-                                    # 3. 🧩 只針對「目前這張單據 (selected_order)」從本地最新的 db 中平鋪攤平
-                                    current_doc = db["manifest_by_order"].get(selected_order, {})
-                                    info = current_doc.get("info", {})
+                                # 3. 🧩 只針對「目前這張單據 (selected_order)」從本地最新的 db 中平鋪攤平
+                                current_doc = db["manifest_by_order"].get(selected_order, {})
+                                info = current_doc.get("info", {})
                                     
-                                    # 將目前這張單據最新的主副行打包，追加進去
-                                    for jan_code, item in current_doc.get("items", {}).items():
-                                        final_flattened_rows_list.append([
-                                            str(selected_order if selected_order is not None else "-"),
-                                            str(info.get("vendor", "-") if info.get("vendor") is not None else "-"),
-                                            str(info.get("expected_delivery", "-") if info.get("expected_delivery") is not None else "-"),
-                                            str(info.get("operator", "-") if info.get("operator") is not None else "-"),
-                                            str(jan_code if jan_code is not None else "-"),
-                                            str(item.get("name_ja", "-") if item.get("name_ja") is not None else "-"),
-                                            str(item.get("lot_no", "") if item.get("lot_no") is not None else ""),
-                                            str(item.get("expiry", "") if item.get("expiry") is not None else ""),
-                                            str(item.get("expected_count", 0) if item.get("expected_count") is not None else 0),
-                                            str(item.get("actual_count", 0) if item.get("actual_count") is not None else 0),
-                                            str(item.get("expected_cases", 0) if item.get("expected_cases") is not None else 0),
-                                            str(item.get("pcs_per_case", 0) if item.get("pcs_per_case") is not None else 0),
-                                            str(item.get("actual_cases", 0) if item.get("actual_cases") is not None else 0),
-                                            str(item.get("status", "未點收") if item.get("status") is not None else "未點收"),
-                                            str(current_doc.get("archived_order", "False") if current_doc.get("archived_order") is not None else "False")
-                                        ])
+                                # 將目前這張單據最新的主副行打包，追加進去
+                                for jan_code, item in current_doc.get("items", {}).items():
+                                    final_flattened_rows_list.append([
+                                        str(selected_order if selected_order is not None else "-"),
+                                        str(info.get("vendor", "-") if info.get("vendor") is not None else "-"),
+                                        str(info.get("expected_delivery", "-") if info.get("expected_delivery") is not None else "-"),
+                                        str(info.get("operator", "-") if info.get("operator") is not None else "-"),
+                                        str(jan_code if jan_code is not None else "-"),
+                                        str(item.get("name_ja", "-") if item.get("name_ja") is not None else "-"),
+                                        str(item.get("lot_no", "") if item.get("lot_no") is not None else ""),
+                                        str(item.get("expiry", "") if item.get("expiry") is not None else ""),
+                                        str(item.get("expected_count", 0) if item.get("expected_count") is not None else 0),
+                                        str(item.get("actual_count", 0) if item.get("actual_count") is not None else 0),
+                                        str(item.get("expected_cases", 0) if item.get("expected_cases") is not None else 0),
+                                        str(item.get("pcs_per_case", 0) if item.get("pcs_per_case") is not None else 0),
+                                        str(item.get("actual_cases", 0) if item.get("actual_cases") is not None else 0),
+                                        str(item.get("status", "未點收") if item.get("status") is not None else "未點收"),
+                                        str(current_doc.get("archived_order", "False") if current_doc.get("archived_order") is not None else "False")
+                                    ])
 
-                                    # 4. 🧽 清空雲端，重新射入精準過濾後的乾淨數據
-                                    manifest_sheet.clear()
+                                # 4. 🧽 清空雲端，重新射入精準過濾後的乾淨數據
+                                manifest_sheet.clear()
                                     
-                                    if final_flattened_rows_list:
-                                        values_to_write = [header] + final_flattened_rows_list
-                                    else:
-                                        values_to_write = [header]
+                                if final_flattened_rows_list:
+                                    values_to_write = [header] + final_flattened_rows_list
+                                else:
+                                    values_to_write = [header]
                                         
-                                    # 三層高相容性安全寫入機制
+                                # 三層高相容性安全寫入機制
+                                try:
+                                    manifest_sheet.update(values_to_write, "A1")
+                                except:
                                     try:
-                                        manifest_sheet.update(values_to_write, "A1")
+                                        manifest_sheet.update(range_name="A1", values=values_to_write)
                                     except:
-                                        try:
-                                            manifest_sheet.update(range_name="A1", values=values_to_write)
-                                        except:
-                                            manifest_sheet.append_rows(values_to_write)
+                                        manifest_sheet.append_rows(values_to_write)
                                             
-                                except Exception as cloud_err:
-                                    st.error(f"雲端持久化失敗: {cloud_err}")
-                                # ==================================================================
+                            except Exception as cloud_err:
+                                st.error(f"雲端持久化失敗: {cloud_err}")
+                            # ==================================================================
+
 
 
 
