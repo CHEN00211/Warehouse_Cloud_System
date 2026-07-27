@@ -1327,7 +1327,7 @@ if is_tab2_active:
                 # 建立點貨資料收集容器
                 collected_rows_data = []
 
-                # ==================== 動態迴圈：獨立渲染每一組項目組合 ====================
+# ==================== 動態迴圈：獨立渲染每一組項目組合 ====================
                 for idx in range(st.session_state[row_count_key]):
                     st.markdown(f"**項目組合 {idx + 1}**" if st.session_state.lang == "zh" else f"**アイテム組み合わせ {idx + 1}**")
                     
@@ -1337,28 +1337,37 @@ if is_tab2_active:
                     act_widget_key = f"dlg_act_widget_{selected_order}_{current_jan}_{idx}"
 
                     # 箱入數永遠鎖定不變
-                    live_per_val = correct_per_case 
+                    live_per_val = int(correct_per_case) 
 
-                    # 🔄 初始化機制：初次加載時，如果驗收數量還不在記憶體裡，先幫它算好預設值
+                    # 🔒 核心修正一：在記憶體中強行初始化這三個欄位，確保絕對不對調
+                    if per_widget_key not in st.session_state:
+                        st.session_state[per_widget_key] = live_per_val
+                        
+                    if box_widget_key not in st.session_state:
+                        st.session_state[box_widget_key] = int(correct_cases if idx == 0 else 0)
+                        
                     if act_widget_key not in st.session_state:
-                        initial_box = correct_cases if idx == 0 else 0
-                        st.session_state[act_widget_key] = int(initial_box * live_per_val)
+                        # 驗收數量 = 箱數 × 箱入數
+                        st.session_state[act_widget_key] = int(st.session_state[box_widget_key] * live_per_val)
+
                     # ==================== UI 欄位排版渲染 (精準配比確保完美水平對齊) ====================
                     # [箱入數, 箱數, 驗收數量, Lot批次, 有效期限] -> 按您原始畫面的順序與比例
                     col_per, col_box, col_act, col_lot, col_exp = st.columns([1.0, 1.0, 1.2, 1.8, 1.8])
                     
                     with col_per:
-                        # 欄位 1：箱入數（💡 核心修正：改用純文字標籤，徹底免疫 PDA 快取錯位 Bug）
-                        st.write("箱入數" if st.session_state.lang == "zh" else "入数")
-                        st.code(f"{int(live_per_val)}", language="markdown")
-                        r_per_case = int(live_per_val) # 背後維持數值封裝，確保下方打包與寫入 Google Sheet 邏輯不崩潰
-                        
+                        # 欄位 1：箱入數（反灰鎖定）
+                        # 💡 核心修正二：value 直接死綁記憶體，確保顯示的一定是正確的箱入數 (例如 1)
+                        r_per_case = st.number_input(
+                            "箱入數" if st.session_state.lang == "zh" else "入数", 
+                            min_value=0, 
+                            value=int(st.session_state[per_widget_key]), 
+                            step=1,
+                            key=per_widget_key, 
+                            disabled=True 
+                        )
                     with col_box:
                         # 欄位 2：箱數（變動時觸發自動相乘）
-                        # 💡 核心修正：將預設值直接綁定在記憶體暫存中，防止 PDA 重整時遺失
-                        if box_widget_key not in st.session_state:
-                            st.session_state[box_widget_key] = int(correct_cases if idx == 0 else 0)
-                            
+                        # 💡 核心修正三：value 直接死綁記憶體，確保顯示的一定是正確的箱數 (例如 120)
                         r_cases = st.number_input(
                             "箱數" if st.session_state.lang == "zh" else "箱数", 
                             min_value=0, 
@@ -1368,13 +1377,13 @@ if is_tab2_active:
                             on_change=update_actual_quantity,
                             args=(box_widget_key, live_per_val, act_widget_key)
                         )
-
                     with col_act:
-                        # 欄位 3：驗收數量（由狀態機接管，達成 0 毫秒即時同步更新）
+                        # 欄位 3：驗收數量（由狀態機接管，並從記憶體防守值讀取）
                         actual_label = t["actual"] if "actual" in t else ("驗收數量" if st.session_state.lang == "zh" else "検収数量")
                         r_actual = st.number_input(
                             actual_label, 
                             min_value=0, 
+                            value=int(st.session_state[act_widget_key]),
                             step=1,
                             key=act_widget_key
                         )
@@ -1405,6 +1414,7 @@ if is_tab2_active:
                         "pcs_per_case": r_per_case
                     })
                     st.markdown("---")
+
 
                 # ==================== 對話框專屬：底部控制按鈕區 ====================
                 # 🛠️ 調整比例：改為 [2.5, 2.5] 完全平分，讓兩個按鈕大小一致、更加平均好看！
