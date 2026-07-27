@@ -1149,17 +1149,29 @@ if is_tab1_active:
                     st.rerun()
 
 
-# ==========================================
+# ==================================================================
 # PART 4-1: Tab2 狀態初始化與 PDA 盲刷通道
-# ==========================================
-# ==========================================
-# 💡 擋煞閘門：如果有存過就吃記憶體，按下確認提交才重新拉取
-# ==========================================
-if "cloud_manifest_cache" not in st.session_state or st.session_state.get("need_refresh_cloud_cache", False):
-    st.session_state["cloud_manifest_cache"] = get_google_sheet("Manifest").get_all_values()
-    st.session_state["need_refresh_cloud_cache"] = False
-
+# ==================================================================
 if is_tab2_active:
+    # 💡 終極安全快取閘門：放入 tab2 內部，具備 API 崩潰降級防護，網頁絕不死機 🌟
+    if "cloud_manifest_cache" not in st.session_state:
+        st.session_state["cloud_manifest_cache"] = []
+
+    if "need_refresh_cloud_cache" not in st.session_state:
+        st.session_state["need_refresh_cloud_cache"] = True
+
+    # 只有當第一次進入、或者是點擊提交按鈕需要刷新時，才去敲 API 讀取雲端
+    if not st.session_state["cloud_manifest_cache"] or st.session_state.get("need_refresh_cloud_cache", False):
+        try:
+            manifest_sheet = get_google_sheet("Manifest")
+            st.session_state["cloud_manifest_cache"] = manifest_sheet.get_all_values()
+            st.session_state["need_refresh_cloud_cache"] = False
+        except Exception as api_err:
+            # 🛡️ 核心防守：如果被 Google 拒絕連線 (429/APIError)，絕對不死機崩潰！
+            # 自動退回到上一次存好的記憶體繼續操作，並在畫面上發出黃色降級警告
+            st.session_state["need_refresh_cloud_cache"] = False
+            st.warning("⚠️ 偵測到 Google 雲端流量繁忙中。系統已自動啟動「斷線保護模式」，您可繼續操作，數據會在下一筆提交時同步至雲端！")
+
     # 🛠️ 檢查分頁二專屬的成功訊息，絕對不與 tab1, tab4 混用
     if "pda_success_msg" in st.session_state and st.session_state["pda_success_msg"]:
         st.success(st.session_state["pda_success_msg"])
@@ -1178,6 +1190,7 @@ if is_tab2_active:
         st.session_state.pda_show_dup_warning = False
     if "pda_error_msg" not in st.session_state:
         st.session_state.pda_error_msg = ""
+
 
     raw_options = []
     all_raw_orders = sorted(list(db["manifest_by_order"].keys()), reverse=True)
