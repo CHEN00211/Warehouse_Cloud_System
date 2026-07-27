@@ -1383,7 +1383,7 @@ if is_tab2_active:
                             args=(box_widget_key, final_per_val, act_widget_key) # 💡 傳入洗乾淨的正確箱入數
                         )
 
-                        )
+            
                     with col_act:
                         # 欄位 3：驗收數量（由狀態機接管，並從記憶體防守值讀取）
                         actual_label = t["actual"] if "actual" in t else ("驗收數量" if st.session_state.lang == "zh" else "検収数量")
