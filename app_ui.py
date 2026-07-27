@@ -1797,36 +1797,98 @@ if is_tab2_active:
                     status_col: item_status
                 })
 
+            # ==================================================================
+            # 🌟 終極修正：直連 Google Sheet 數據核心，一條鞭渲染不重複 🌟
+            # ==================================================================
+            try:
+                manifest_sheet = get_google_sheet("Manifest")
+                cloud_values = manifest_sheet.get_all_values()
+                header_cols = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
                 
-                # ==================================================================
-                # 🌟 核心修復：精準過濾邏輯（只有當實到小於預計、且確實有欠貨時才判定為未到貨）
-                # ==================================================================
-                # 真正的「未到貨品項」定義：預計應到數量 > 實到數量（即 calc_shortage 必須大於 0）
-                # 如果選擇僅顯示未到貨，但該品項已經點齊或超收（差異數量 <= 0），則跳過不顯示
-                if filter_mode == t["filter_short"] and calc_shortage <= 0:
-                    continue
+                # 💡 核心安全容器：清空所有舊歷史，確保只裝一份
+                receiving_report_list = []
+                jan_total_actual_map = {}
+                temp_rows_store = []
 
+                if len(cloud_values) > 1:
+                    # 1. 第一輪迴圈：精準抓取當前單號的資料並計算實到總數
+                    for row in cloud_values[1:]:
+                        if len(row) < len(header_cols):
+                            row += [""] * (len(header_cols) - len(row))
+                        
+                        # 🔒 安全防護：只處理與目前選取單號 (selected_order) 相同的列
+                        if str(row[0]).strip() == str(selected_order).strip():
+                            temp_rows_store.append(row)
+                            
+                            c_jan = str(row[4]).strip()
+                            c_status = str(row[13]).strip()
+                            raw_act = row[9]
+                            
+                            if c_jan not in jan_total_actual_map:
+                                jan_total_actual_map[c_jan] = 0
+                                
+                            if c_status in ["決收點貨", "驗貨完畢", "數量有差異", "検収完了", "数量差異あり"]:
+                                act_val = int(raw_act) if (raw_act is not None and str(raw_act).isdigit()) else 0
+                                jan_total_actual_map[c_jan] += act_val
 
-                receiving_report_list.append({
-                    jan_col: display_jan,
-                    name_col: v["name_ja"],
-                    req_col: calc_expected,      
-                    act_col: v["actual_count"],
-                    short_col: calc_shortage,    
-                    lot_col: v.get("lot_no", ""),
-                    exp_col: v.get("expiry", ""),
-                    status_col: item_status
-                })
-            
+                    # 2. 第二輪迴圈：將抓到的唯一雲端數據轉換成網報表格式
+                    for row in temp_rows_store:
+                        c_jan = str(row[4]).strip()
+                        c_name = str(row[5]).strip()
+                        c_lot = str(row[6]).strip()
+                        c_exp = str(row[7]).strip()
+                        c_status = str(row[13]).strip()
+                        
+                        raw_exp_cnt = row[8]
+                        raw_act_cnt = row[9]
+                        
+                        val_expected = int(raw_exp_cnt) if str(raw_exp_cnt).isdigit() else 0
+                        val_actual = int(raw_act_cnt) if str(raw_act_cnt).isdigit() else 0
+                        
+                        # 判斷是否為追加的 Lot 副行（副行的原始預計數為 0，且 JAN 碼中帶有 sub 標記或是 Lot 不為空）
+                        is_sub = (val_expected == 0 and (c_lot != "" or c_exp != ""))
+                        
+                        if is_sub:
+                            calc_expected = 0
+                            calc_shortage = 0
+                        else:
+                            calc_expected = val_expected
+                            calc_shortage = val_expected - jan_total_actual_map.get(c_jan, 0)
+
+                        # 判定畫面上最終要顯示的狀態字樣
+                        if c_status in ["決收點貨", "驗貨完畢", "數量有差異", "検収完了", "数量差異あり"]:
+                            if calc_shortage != 0:
+                                item_status = "數量有差異" if st.session_state.lang == "zh" else "数量差異あり"
+                            else:
+                                item_status = "驗貨完畢" if st.session_state.lang == "zh" else "検収完了"
+                        else:
+                            item_status = "未點收" if st.session_state.lang == "zh" else "未検収"
+
+                        # 欠貨過濾器防線
+                        if filter_mode == t["filter_short"] and calc_shortage <= 0:
+                            continue
+
+                        # 💡 絕對唯一的單次裝填，保證絕不重複
+                        receiving_report_list.append({
+                            jan_col: c_jan,
+                            name_col: c_name,
+                            req_col: calc_expected,      
+                            act_col: val_actual,
+                            short_col: calc_shortage,    
+                            lot_col: c_lot,
+                            exp_col: c_exp,
+                            status_col: item_status
+                        })
+
+            except Exception as e:
+                st.error(f"實時讀取雲端報表失敗: {e}")
+
+            # ==================== 🛠️ 雙層穩定排序與最終畫面渲染 ====================
             if receiving_report_list:
                 df_receiving = pd.DataFrame(receiving_report_list)
                 
-                # 💡 終極安全修正：直接利用 DataFrame 內建的 JAN 碼去對位，不再使用危險的 index 數字
-                # 建立精準的原始名冊順序錨點（從 db 本地商品清單中拿到最初上傳時的順序）
                 csv_original_order = {}
                 order_idx = 0
-                
-                # 從大核心單據資料中讀取最原始的商品順序
                 original_items = db["manifest_by_order"].get(selected_order, {}).get("items", {})
                 for item_key, item_val in original_items.items():
                     if not item_val.get("is_sub_row"):
@@ -1836,31 +1898,26 @@ if is_tab2_active:
                 temp_sort_csv_idx = []
                 temp_sort_is_sub = []
 
-                # 🚀 用安全的方式迭代 DataFrame 的每一行
                 for idx, row in df_receiving.iterrows():
-                    # 從畫面的欄位中直接取出這個 JAN Code
                     current_row_jan = str(row[jan_col]).strip()
-                    
-                    # 💡 檢查這個 JAN 碼在原始 CSV 中是第幾個，找不到就排最後（9999）
                     temp_sort_csv_idx.append(csv_original_order.get(current_row_jan, 9999))
                     
-                    # 💡 檢查這一列是否有填寫過 Lot 批次或日期，如果有且跟原始不同，或者是狀態為差異，就判定為副行 (排序在下方)
-                    # 這裡根據畫面上的數據直接推算，徹底擺脫對本地 pool 的依賴
-                    is_sub_flag = 1 if ("_sub_" in current_row_jan or row[status_col] in ["數量有差異", "数量差異あり"]) else 0
+                    is_sub_flag = 1 if (row[status_col] in ["數量有差異", "数量差異あり"] or row[req_col] == 0) else 0
                     temp_sort_is_sub.append(is_sub_flag)
 
                 df_receiving["_sort_csv_idx"] = temp_sort_csv_idx
                 df_receiving["_sort_sub"] = temp_sort_is_sub
 
-                # 執行雙層穩定排序，確保同品項的副行（多批次）緊緊跟在主行正下方
                 df_receiving = df_receiving.sort_values(
                     by=["_sort_csv_idx", "_sort_sub"],
                     ascending=[True, True],
                     kind="stable"
                 ).drop(columns=["_sort_csv_idx", "_sort_sub"])
 
-                # 🎯 完美渲染直連 Google Sheet 的網頁大表！
+                # 🎯 完美、乾淨、絕不重複的直連雲端大表渲染！
                 st.dataframe(df_receiving, use_container_width=True, hide_index=True)
+                
+
 
                 
                 # 當前入庫單結案按鈕 (完成驗貨)
