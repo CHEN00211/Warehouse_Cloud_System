@@ -1705,30 +1705,66 @@ if is_tab2_active:
                 status_col = "ステータス"
 
             # ==================================================================
-            # 🌟 核心修復：狀態安全過濾（只有狀態為 "決收點貨" 的實到數量才進行累加）
+            # 🌟 核心修復：直連 Google Sheet 雲端數據，實時同步回寫網頁大表 🌟
             # ==================================================================
+            try:
+                # 1. ⚡ 實時拉取雲端當前最真實的整張大表
+                manifest_sheet = get_google_sheet("Manifest")
+                cloud_values = manifest_sheet.get_all_values()
+                header_cols = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
+                
+                # 2. 🧩 將雲端資料過濾，只留下目前這張單號（selected_order）的最新數據
+                current_manifest_pool = {}
+                if len(cloud_values) > 1:
+                    for row in cloud_values[1:]:
+                        if len(row) < len(header_cols):
+                            row += [""] * (len(header_cols) - len(row))
+                        
+                        # 檢查單號是否相符
+                        if str(row[0]).strip() == str(selected_order).strip():
+                            c_jan = str(row[4]).strip()
+                            c_lot = str(row[6]).strip()
+                            c_exp = str(row[7]).strip()
+                            
+                            # 建立一個與您原本格式完全相同的虛擬 pool 結構，完美向下相容
+                            is_sub = "_sub_" in c_jan or (c_lot != "" and c_exp != "") # 判斷是否為副行
+                            
+                            # 如果是增開的副行，建立獨立的 key
+                            pool_key = c_jan if not is_sub else f"{c_jan}_sub_{c_lot}_{c_exp.replace('/', '')}"
+                            
+                            current_manifest_pool[pool_key] = {
+                                "name_ja": str(row[5]),
+                                "lot_no": c_lot,
+                                "expiry": c_exp,
+                                "expected_count": int(row[8]) if str(row[8]).isdigit() else 0,
+                                "actual_count": int(row[9]) if str(row[9]).isdigit() else 0,
+                                "expected_cases": int(row[10]) if str(row[10]).isdigit() else 0,
+                                "pcs_per_case": int(row[11]) if str(row[11]).isdigit() else 1,
+                                "actual_cases": int(row[12]) if str(row[12]).isdigit() else 0,
+                                "status": str(row[13]),
+                                "is_sub_row": is_sub,
+                                "parent_jan": c_jan if is_sub else None
+                            }
+            except Exception as e:
+                st.error(f"實時讀取雲端報表失敗: {e}")
+
+            # 3. 🔒 狀態安全過濾（只有狀態為 "決收點貨" 的實到數量才進行累加）
             jan_total_actual_map = {}
             for k, v in current_manifest_pool.items():
                 real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
                 if real_jan not in jan_total_actual_map:
                     jan_total_actual_map[real_jan] = 0
                 
-                # 🔒 安全閘門：只有當這一個行（或副行）確實完成點收時，才累加它的實到數量
                 if v.get("status") == "決收點貨":
-                    # 防禦 NoneType：如果取出來是 None，安全轉型為 0 進行計算
                     raw_act = v.get("actual_count", 0)
                     act_val = int(raw_act) if (raw_act is not None and str(raw_act).isdigit()) else 0
                     jan_total_actual_map[real_jan] += act_val
-                else:
-                    # 如果根本還沒點收，實到增量直接視為 0
-                    jan_total_actual_map[real_jan] += 0
 
-
+            # 4. 建立網頁呈現用的報表清單
             receiving_report_list = []
             for k, v in current_manifest_pool.items():
                 real_jan = v.get("parent_jan", k) if v.get("is_sub_row") else k
                 
-                # 副行預計數/差異數皆為 0；主行差異數扣除副行實到，避免產生負數
                 if v.get("is_sub_row"):
                     calc_expected = 0
                     calc_shortage = 0
@@ -1739,13 +1775,27 @@ if is_tab2_active:
                     display_jan = k
                 
                 if v.get("status") == "決收點貨":
-                    # 💡 核心修復：如果已經驗貨，但預計數與總實到數有落差（包含少到或超到）
                     if calc_shortage != 0:
                         item_status = "數量有差異" if st.session_state.lang == "zh" else "数量差異あり"
                     else:
                         item_status = "驗貨完畢" if st.session_state.lang == "zh" else "検収完了"
                 else:
                     item_status = "未點收" if st.session_state.lang == "zh" else "未検収"
+
+                if filter_mode == t["filter_short"] and calc_shortage <= 0:
+                    continue
+
+                # 💡 這裏打包的每一行，全部死死綁定剛剛從 Google Sheet 撈出來的最新欄位！
+                receiving_report_list.append({
+                    jan_col: display_jan,
+                    name_col: v["name_ja"],
+                    req_col: calc_expected,      
+                    act_col: v["actual_count"],
+                    short_col: calc_shortage,    
+                    lot_col: v.get("lot_no", ""), # 🌟 成功從雲端回寫至網頁大表！
+                    exp_col: v.get("expiry", ""), # 🌟 成功從雲端回寫至網頁大表！
+                    status_col: item_status
+                })
 
                 
                 # ==================================================================
