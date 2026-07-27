@@ -1343,32 +1343,32 @@ if is_tab2_active:
                     if act_widget_key not in st.session_state:
                         initial_box = correct_cases if idx == 0 else 0
                         st.session_state[act_widget_key] = int(initial_box * live_per_val)
-
                     # ==================== UI 欄位排版渲染 (精準配比確保完美水平對齊) ====================
                     # [箱入數, 箱數, 驗收數量, Lot批次, 有效期限] -> 按您原始畫面的順序與比例
                     col_per, col_box, col_act, col_lot, col_exp = st.columns([1.0, 1.0, 1.2, 1.8, 1.8])
                     
                     with col_per:
-                        # 欄位 1：箱入數（預設反灰鎖定）
-                        r_per_case = st.number_input(
-                            "箱入數" if st.session_state.lang == "zh" else "入数", 
-                            min_value=0, 
-                            value=int(live_per_val), 
-                            step=1,
-                            key=per_widget_key, 
-                            disabled=True 
-                        )
+                        # 欄位 1：箱入數（💡 核心修正：改用純文字標籤，徹底免疫 PDA 快取錯位 Bug）
+                        st.write("箱入數" if st.session_state.lang == "zh" else "入数")
+                        st.code(f"{int(live_per_val)}", language="markdown")
+                        r_per_case = int(live_per_val) # 背後維持數值封裝，確保下方打包與寫入 Google Sheet 邏輯不崩潰
+                        
                     with col_box:
                         # 欄位 2：箱數（變動時觸發自動相乘）
+                        # 💡 核心修正：將預設值直接綁定在記憶體暫存中，防止 PDA 重整時遺失
+                        if box_widget_key not in st.session_state:
+                            st.session_state[box_widget_key] = int(correct_cases if idx == 0 else 0)
+                            
                         r_cases = st.number_input(
                             "箱數" if st.session_state.lang == "zh" else "箱数", 
                             min_value=0, 
-                            value=correct_cases if idx == 0 else 0, 
+                            value=int(st.session_state[box_widget_key]), 
                             step=1, 
                             key=box_widget_key,
                             on_change=update_actual_quantity,
                             args=(box_widget_key, live_per_val, act_widget_key)
                         )
+
                     with col_act:
                         # 欄位 3：驗收數量（由狀態機接管，達成 0 毫秒即時同步更新）
                         actual_label = t["actual"] if "actual" in t else ("驗收數量" if st.session_state.lang == "zh" else "検収数量")
