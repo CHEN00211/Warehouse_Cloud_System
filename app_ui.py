@@ -1353,10 +1353,16 @@ if is_tab2_active:
                     else:
                         final_box_val = total_expected
 
-                    # ⚡ 終極修正 3：【記憶體強制清洗】強行用正確的數值覆寫 Streamlit 的舊快取暫存
-                    st.session_state[per_widget_key] = int(final_per_val)
-                    st.session_state[box_widget_key] = int(final_box_val if idx == 0 else 0)
-                    st.session_state[act_widget_key] = int(st.session_state[box_widget_key] * st.session_state[per_widget_key])
+                    # ⚡ 終極修正 3：【智慧型記憶體綁定】初次加載強行初始化，後續變更完美保留
+                    if per_widget_key not in st.session_state:
+                        st.session_state[per_widget_key] = int(final_per_val)
+                        
+                    if box_widget_key not in st.session_state:
+                        st.session_state[box_widget_key] = int(final_box_val if idx == 0 else 0)
+                        
+                    if act_widget_key not in st.session_state:
+                        st.session_state[act_widget_key] = int(st.session_state[box_widget_key] * st.session_state[per_widget_key])
+
 
                     # ==================== UI 欄位排版渲染 (精準配比確保完美水平對齊) ====================
                     # [箱入數, 箱數, 驗收數量, Lot批次, 有效期限] -> 按您原始畫面的順序與比例
