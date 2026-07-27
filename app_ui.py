@@ -1234,22 +1234,31 @@ if is_tab2_active:
                 # 💡 將 ITF 自動還原成 JAN 碼
                 target_jan = itf_to_jan13(raw_input)
                 
-                # 🔒 完美的 16 個空格縮排（相對於 def 有 4 個空格）
-                if target_jan and current_manifest_pool:
-                    if target_jan in current_manifest_pool:
-                        item = current_manifest_pool[target_jan]
-                        st.session_state.pda_current_verified_jan = target_jan
-                        st.session_state.pda_temp_name_ja = item["name_ja"]
-                        st.session_state.pda_temp_expected_count = item["expected_count"]
-                        st.session_state.pda_temp_actual_count = item["expected_count"]  
-                        st.session_state.pda_show_dup_warning = (item.get("status") == "決收點貨" or item.get("status") == "已點收驗收")
+                # 🔒 核心安全修正：將刷入的條碼強制轉為乾淨去空格的字串型態，防止型態誤判
+                clean_target_jan = str(target_jan).strip() if target_jan else ""
+                
+                if clean_target_jan and current_manifest_pool:
+                    # 💡 建立一個全部都去空格的字串 Key 對照表，確保不論如何百分之百能比對成功
+                    normalized_pool_keys = [str(k).strip() for k in current_manifest_pool.keys()]
+                    
+                    if clean_target_jan in normalized_pool_keys:
+                        # 找到對應的商品項目
+                        # 考慮到可能會有型態不同的問題，精準撈取
+                        matched_key = [k for k in current_manifest_pool.keys() if str(k).strip() == clean_target_jan][0]
+                        item = current_manifest_pool[matched_key]
+                        
+                        st.session_state.pda_current_verified_jan = clean_target_jan
+                        st.session_state.pda_temp_name_ja = item.get("name_ja", "-")
+                        st.session_state.pda_temp_expected_count = item.get("expected_count", 0)
+                        st.session_state.pda_temp_actual_count = item.get("expected_count", 0)  
+                        st.session_state.pda_show_dup_warning = (item.get("status") in ["決收點貨", "已點收驗收", "驗貨完畢"])
                         st.session_state.pda_error_msg = ""
                     else:
                         st.session_state.pda_current_verified_jan = "ERROR_NOT_FOUND"
                         st.session_state.pda_error_msg = t["jan_not_found"]
                         
-                # 🔒 key + 1 必須在 if 結束後、函式結束前執行
                 st.session_state.pda_key += 1
+
 
 
             st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
