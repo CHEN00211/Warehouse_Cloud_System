@@ -1263,13 +1263,31 @@ if is_tab2_active:
 
             st.text_input(t["scan_jan"], key=f"pda_input_slot_{selected_order}_{st.session_state.pda_key}", on_change=handle_pda_scan_secure)
 
+            # ==================== 🛠️ 修正後的智能錯誤訊息顯示區 ====================
+            # 只有當真的找不到條碼，且這筆條碼「完全沒有出現在下方報表名冊裡」時，才允許顯示紅色警告
             if st.session_state.get("pda_current_verified_jan") == "ERROR_NOT_FOUND":
-                st.error(st.session_state.pda_error_msg.replace("！", ""))
+                
+                # 💡 核心安全防線：即時向下方直連雲端的接收報表清單（df_receiving 或現有名冊）借用清單
+                # 如果發現這個條碼在下方的報表中狀態是「驗貨完畢」，代表它是剛點收成功的品項，直接忽略警告！
+                is_this_jan_already_verified = False
+                try:
+                    if 'df_receiving' in locals() or 'df_receiving' in globals():
+                        if jan_col in df_receiving.columns:
+                            verified_jans_on_screen = df_receiving[jan_col].astype(str).str.strip().tolist()
+                            # 如果這個條碼明明就在畫面上，代表它根本不是錯誤品項
+                            if str(target_jan).strip() in verified_jans_on_screen:
+                                is_this_jan_already_verified = True
+                except:
+                    pass
+
+                # 🔒 只有在「真正找不到商品」的狀況下，才允許彈出紅色警告
+                if not is_this_jan_already_verified:
+                    st.error(st.session_state.pda_error_msg.replace("！", ""))
+                
+                # 💡 顯示完畢後，立刻徹底洗淨記憶體，不讓任何舊狀態殘留到下一輪
                 st.session_state.pda_current_verified_jan = ""
-                st.session_state.pda_temp_name_ja = ""
-                st.session_state.pda_temp_expected_count = 0
-                st.session_state.pda_temp_actual_count = 0
-                st.session_state.pda_show_dup_warning = False
+            # ==================================================================
+
             # ==========================================
             # PART 4-2 (上): Tab2 確認提交表單與動態欄位生成
             # ==========================================
