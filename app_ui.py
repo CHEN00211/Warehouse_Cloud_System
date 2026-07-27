@@ -1584,19 +1584,20 @@ if is_tab2_active:
                                 except Exception:
                                     cloud_values = []
                                         
+                                final_flattened_rows_list = []
+                                    
+                                # 2. 💡 核心過濾：只保留「別人的單據」，精準剔除當前單據與幽靈無效行
                                 if len(cloud_values) > 1:
-                                    # 💡 核心對齊：確保 DataFrame 的 columns 百分之百精準對齊自訂的 header
-                                    df_cloud = pd.DataFrame(cloud_values[1:], columns=header)
-                                        
-                                    # 💡 核心修正一：直接把「目前這張單據 (selected_order)」以及所有「空白無效行」從雲端記憶體中徹底蒸發
-                                    df_cloud = df_cloud[
-                                        (df_cloud["order_no"].astype(str).str.strip() != str(selected_order)) & 
-                                        (df_cloud["order_no"].astype(str).str.strip() != "") & 
-                                        (df_cloud["order_no"].astype(str).str.strip() != "-")
-                                    ]
-                                    final_flattened_rows_list = df_cloud.values.tolist()
-                                else:
-                                    final_flattened_rows_list = []
+                                    for row in cloud_values[1:]:
+                                        # 防止列長度不足導致的 Index 出錯，補齊欄位數
+                                        if len(row) < len(header):
+                                            row += [""] * (len(header) - len(row))
+                                                
+                                        c_order_no = str(row[0]).strip()
+                                            
+                                        # 🔒 安全閘門：只有當這列資料「不屬於目前單號」且「不是空白、不是破折號」時才完整保留
+                                        if c_order_no != str(selected_order) and c_order_no != "" and c_order_no != "-":
+                                            final_flattened_rows_list.append([str(cell) for cell in row[:len(header)]])
 
                                 # 3. 🧩 只針對「目前這張單據 (selected_order)」從本地最新的 db 中平鋪攤平
                                 current_doc = db["manifest_by_order"].get(selected_order, {})
@@ -1641,6 +1642,7 @@ if is_tab2_active:
                                             
                             except Exception as cloud_err:
                                 st.error(f"雲端持久化失敗: {cloud_err}")
+
                             # ==================================================================
 
 
