@@ -1598,34 +1598,35 @@ if is_tab2_active:
                                         # 🔒 安全閘門：只有當這列資料「不屬於目前單號」且「不是空白、不是破折號」時才完整保留
                                         if c_order_no != str(selected_order) and c_order_no != "" and c_order_no != "-":
                                             final_flattened_rows_list.append([str(cell) for cell in row[:len(header)]])
+                                            
+                                    # 3. 🧩 只針對「目前這張單據 (selected_order)」從本地最新的 db 中平鋪攤平
+                                    current_doc = db["manifest_by_order"].get(selected_order, {})
+                                    
+                                    # 💡 核心修正：強行將剛剛寫入 Lot 和日期的最新點收池，同步回單據物件中
+                                    current_doc["items"] = current_manifest_pool
+                                    
+                                    info = current_doc.get("info", {})
+                                    
+                                    # 將目前這張單據最新的主副行打包，追加進去
+                                    for jan_code, item in current_doc.get("items", {}).items():
+                                        final_flattened_rows_list.append([
+                                            str(selected_order if selected_order is not None else "-"),
+                                            str(info.get("vendor", "-") if info.get("vendor") is not None else "-"),
+                                            str(info.get("expected_delivery", "-") if info.get("expected_delivery") is not None else "-"),
+                                            str(info.get("operator", "-") if info.get("operator") is not None else "-"),
+                                            str(jan_code if jan_code is not None else "-"),
+                                            str(item.get("name_ja", "-") if item.get("name_ja") is not None else "-"),
+                                            str(item.get("lot_no", "") if item.get("lot_no") is not None else ""),   # 💡 這樣就能精準抓到 Lot 了！
+                                            str(item.get("expiry", "") if item.get("expiry") is not None else ""),   # 💡 這樣就能精準抓到日期了！
+                                            str(item.get("expected_count", 0) if item.get("expected_count") is not None else 0),
+                                            str(item.get("actual_count", 0) if item.get("actual_count") is not None else 0),
+                                            str(item.get("expected_cases", 0) if item.get("expected_cases") is not None else 0),
+                                            str(item.get("pcs_per_case", 0) if item.get("pcs_per_case") is not None else 0),
+                                            str(item.get("actual_cases", 0) if item.get("actual_cases") is not None else 0),
+                                            str(item.get("status", "未點收") if item.get("status") is not None else "未點收"),
+                                            str(current_doc.get("archived_order", "False") if current_doc.get("archived_order") is not None else "False")
+                                        ])
 
-                                 # 3. 🧩 只針對「目前這張單據 (selected_order)」從本地最新的 db 中平鋪攤平
-                                 current_doc = db["manifest_by_order"].get(selected_order, {})
-                                    
-                                 # 💡 核心修正：強行將剛剛寫入 Lot 和日期的最新點收池，同步回單據物件中
-                                 current_doc["items"] = current_manifest_pool
-                                    
-                                 info = current_doc.get("info", {})
-                                    
-                                 # 將目前這張單據最新的主副行打包，追加進去
-                                 for jan_code, item in current_doc.get("items", {}).items():
-                                     final_flattened_rows_list.append([
-                                         str(selected_order if selected_order is not None else "-"),
-                                         str(info.get("vendor", "-") if info.get("vendor") is not None else "-"),
-                                         str(info.get("expected_delivery", "-") if info.get("expected_delivery") is not None else "-"),
-                                         str(info.get("operator", "-") if info.get("operator") is not None else "-"),
-                                         str(jan_code if jan_code is not None else "-"),
-                                         str(item.get("name_ja", "-") if item.get("name_ja") is not None else "-"),
-                                         str(item.get("lot_no", "") if item.get("lot_no") is not None else ""),   # 💡 這樣就能精準抓到 Lot 了！
-                                         str(item.get("expiry", "") if item.get("expiry") is not None else ""),   # 💡 這樣就能精準抓到日期了！
-                                         str(item.get("expected_count", 0) if item.get("expected_count") is not None else 0),
-                                         str(item.get("actual_count", 0) if item.get("actual_count") is not None else 0),
-                                         str(item.get("expected_cases", 0) if item.get("expected_cases") is not None else 0),
-                                         str(item.get("pcs_per_case", 0) if item.get("pcs_per_case") is not None else 0),
-                                         str(item.get("actual_cases", 0) if item.get("actual_cases") is not None else 0),
-                                         str(item.get("status", "未點收") if item.get("status") is not None else "未點收"),
-                                         str(current_doc.get("archived_order", "False") if current_doc.get("archived_order") is not None else "False")
-                                     ])
 
 
                                 # 4. 🧽 清空雲端，重新射入精準過濾後的乾淨數據
