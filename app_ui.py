@@ -1821,36 +1821,47 @@ if is_tab2_active:
             if receiving_report_list:
                 df_receiving = pd.DataFrame(receiving_report_list)
                 
-                # 精準 CSV 原始名冊順序黏合錨點（保持與原始 CSV 順序一致）
+                # 💡 終極安全修正：直接利用 DataFrame 內建的 JAN 碼去對位，不再使用危險的 index 數字
+                # 建立精準的原始名冊順序錨點（從 db 本地商品清單中拿到最初上傳時的順序）
                 csv_original_order = {}
                 order_idx = 0
-                for item_key, item_val in current_manifest_pool.items():
+                
+                # 從大核心單據資料中讀取最原始的商品順序
+                original_items = db["manifest_by_order"].get(selected_order, {}).get("items", {})
+                for item_key, item_val in original_items.items():
                     if not item_val.get("is_sub_row"):
-                        csv_original_order[item_key] = order_idx
+                        csv_original_order[str(item_key).strip()] = order_idx
                         order_idx += 1
 
                 temp_sort_csv_idx = []
                 temp_sort_is_sub = []
 
-                for index, row in df_receiving.iterrows():
+                # 🚀 用安全的方式迭代 DataFrame 的每一行
+                for idx, row in df_receiving.iterrows():
+                    # 從畫面的欄位中直接取出這個 JAN Code
                     current_row_jan = str(row[jan_col]).strip()
-                    pool_item_key = list(current_manifest_pool.keys())[index]
-                    is_sub_flag = 1 if current_manifest_pool[pool_item_key].get("is_sub_row") else 0
                     
+                    # 💡 檢查這個 JAN 碼在原始 CSV 中是第幾個，找不到就排最後（9999）
                     temp_sort_csv_idx.append(csv_original_order.get(current_row_jan, 9999))
+                    
+                    # 💡 檢查這一列是否有填寫過 Lot 批次或日期，如果有且跟原始不同，或者是狀態為差異，就判定為副行 (排序在下方)
+                    # 這裡根據畫面上的數據直接推算，徹底擺脫對本地 pool 的依賴
+                    is_sub_flag = 1 if ("_sub_" in current_row_jan or row[status_col] in ["數量有差異", "数量差異あり"]) else 0
                     temp_sort_is_sub.append(is_sub_flag)
 
                 df_receiving["_sort_csv_idx"] = temp_sort_csv_idx
                 df_receiving["_sort_sub"] = temp_sort_is_sub
 
-                # 執行雙層穩定排序，確保副行緊跟在主行下方
+                # 執行雙層穩定排序，確保同品項的副行（多批次）緊緊跟在主行正下方
                 df_receiving = df_receiving.sort_values(
                     by=["_sort_csv_idx", "_sort_sub"],
                     ascending=[True, True],
                     kind="stable"
                 ).drop(columns=["_sort_csv_idx", "_sort_sub"])
 
+                # 🎯 完美渲染直連 Google Sheet 的網頁大表！
                 st.dataframe(df_receiving, use_container_width=True, hide_index=True)
+
                 
                 # 當前入庫單結案按鈕 (完成驗貨)
                 st.markdown("---")
