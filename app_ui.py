@@ -1652,82 +1652,100 @@ if is_tab2_active:
                             manifest_sheet = get_google_sheet("Manifest")
                             flattened_rows_list = []
                             # ==================================================================
-                            # 🌟 多人安全併發修正：精準單號隔離平鋪覆寫（徹底消滅無限增生 Bug）🌟
+                            # 🌟 多人安全併發修正：雲端本地智慧融合盾（徹底解決舊 Lot 被洗空 Bug）🌟
                             # ==================================================================
                             try:
                                 manifest_sheet = get_google_sheet("Manifest")
                                 header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
                                     
-                                # 1. ⚡ 實時拉取雲端當前最真實的整張大表
-                                try:
-                                    cloud_values = st.session_state["cloud_manifest_cache"]
-                                except Exception:
-                                    cloud_values = []
-                                        
-                                final_flattened_rows_list = []
+                                # 1. ⚡ 實時從我們建立的記憶體快取中，撈出當前大表所有資料
+                                cloud_values = st.session_state.get("cloud_manifest_cache", [])
                                     
-                                # 2. 💡 核心過濾：只保留「別人的單據」，精準剔除當前單據與幽靈無效行
+                                final_flattened_rows_list = []
+                                cloud_history_map = {} # 💡 建立一個雲端歷史 Lot 的備份規格庫
+                                    
+                                # 2. 💡 第一輪迴圈：保留其他單號的所有資料，同時秘密備份「目前單號」在雲端已有的歷史 Lot
                                 if len(cloud_values) > 1:
                                     for row in cloud_values[1:]:
-                                        # 防止列長度不足導致的 Index 出錯，補齊欄位數
                                         if len(row) < len(header):
                                             row += [""] * (len(header) - len(row))
                                                 
                                         c_order_no = str(row[0]).strip()
+                                        c_jan = str(row[4]).strip()
+                                        c_lot = str(row[6]).strip()
+                                        c_exp = str(row[7]).strip()
                                             
-                                        # 🔒 安全閘門：只有當這列資料「不屬於目前單號」且「不是空白、不是破折號」時才完整保留
+                                        # 🔒 A. 如果是別人的單據，原地保留
                                         if c_order_no != str(selected_order) and c_order_no != "" and c_order_no != "-":
                                             final_flattened_rows_list.append([str(cell) for cell in row[:len(header)]])
                                             
-                                    # 3. 🧩 只針對「目前這張單據 (selected_order)」從本地最新的 db 中平鋪攤平
-                                    current_doc = db["manifest_by_order"].get(selected_order, {})
-                                    
-                                    # 💡 核心修正：強行將剛剛寫入 Lot 和日期的最新點收池，同步回單據物件中
-                                    current_doc["items"] = current_manifest_pool
-                                    
-                                    info = current_doc.get("info", {})
-                                    
-                                    # 將目前這張單據最新的主副行打包，追加進去
-                                    for jan_code, item in current_doc.get("items", {}).items():
-                                        final_flattened_rows_list.append([
-                                            str(selected_order if selected_order is not None else "-"),
-                                            str(info.get("vendor", "-") if info.get("vendor") is not None else "-"),
-                                            str(info.get("expected_delivery", "-") if info.get("expected_delivery") is not None else "-"),
-                                            str(info.get("operator", "-") if info.get("operator") is not None else "-"),
-                                            str(jan_code if jan_code is not None else "-"),
-                                            str(item.get("name_ja", "-") if item.get("name_ja") is not None else "-"),
-                                            str(item.get("lot_no", "") if item.get("lot_no") is not None else ""),   # 💡 這樣就能精準抓到 Lot 了！
-                                            str(item.get("expiry", "") if item.get("expiry") is not None else ""),   # 💡 這樣就能精準抓到日期了！
-                                            str(item.get("expected_count", 0) if item.get("expected_count") is not None else 0),
-                                            str(item.get("actual_count", 0) if item.get("actual_count") is not None else 0),
-                                            str(item.get("expected_cases", 0) if item.get("expected_cases") is not None else 0),
-                                            str(item.get("pcs_per_case", 0) if item.get("pcs_per_case") is not None else 0),
-                                            str(item.get("actual_cases", 0) if item.get("actual_cases") is not None else 0),
-                                            str(item.get("status", "未點收") if item.get("status") is not None else "未點收"),
-                                            str(current_doc.get("archived_order", "False") if current_doc.get("archived_order") is not None else "False")
-                                        ])
+                                        # 🔒 B. 如果是目前單據，且雲端上「明明就有 Lot 資料」，趕緊把它記在備份庫裡！
+                                        elif c_order_no == str(selected_order) and (c_lot != "" or c_exp != ""):
+                                            cloud_history_map[c_jan] = {"lot": c_lot, "expiry": c_exp}
 
-
-
-                                # 4. 🧽 清空雲端，重新射入精準過濾後的乾淨數據
-                                manifest_sheet.clear()
+                                # 3. 🧩 第二輪迴圈：將目前這張單據最新的 pool 平鋪攤平，並與雲端歷史進行「智慧型融合」
+                                current_doc = db["manifest_by_order"].get(selected_order, {})
+                                info = current_doc.get("info", {})
                                     
-                                if final_flattened_rows_list:
-                                    values_to_write = [header] + final_flattened_rows_list
-                                else:
-                                    values_to_write = [header]
+                                # 確保本地 items 與 pool 完全同步
+                                current_doc["items"] = current_manifest_pool
+                                db["manifest_by_order"][selected_order] = current_doc
+                                    
+                                for jan_code, item in current_manifest_pool.items():
+                                    # 核心抓取本地點收資料
+                                    local_lot = str(item.get("lot_no", "")).strip()
+                                    local_exp = str(item.get("expiry", "")).strip()
                                         
-                                # 三層高相容性安全寫入機制
+                                    # 💡【智慧型融合核心】防禦空值：
+                                    # 如果本地抓出來的 Lot 是空的，但剛剛雲端備份庫裡「明明有歷史紀錄」，
+                                    # 強制把雲端的舊 Lot 借過來用，死死堵住被空值沖刷洗掉的死穴！
+                                    if local_lot == "" and jan_code in cloud_history_map:
+                                        local_lot = cloud_history_map[jan_code]["lot"]
+                                        local_exp = cloud_history_map[jan_code]["expiry"]
+                                        # 同步回寫本地記憶體，確保雙向完全對齊不漏勾
+                                        current_manifest_pool[jan_code]["lot_no"] = local_lot
+                                        current_manifest_pool[jan_code]["expiry"] = local_exp
+
+                                    final_flattened_rows_list.append([
+                                        str(selected_order if selected_order is not None else "-"),
+                                        str(info.get("vendor", "-")),
+                                        str(info.get("expected_delivery", "-")),
+                                        str(info.get("operator", "-")),
+                                        str(jan_code if jan_code is not None else "-"),
+                                        str(item.get("name_ja", "-")),
+                                        str(local_lot), # 🌟 使用融合後絕對不會變空白的 Lot！
+                                        str(local_exp), # 🌟 使用融合後絕對不會變空白的有效期限！
+                                        str(item.get("expected_count", 0)),
+                                        str(item.get("actual_count", 0)),
+                                        str(item.get("expected_cases", 0)),
+                                        str(item.get("pcs_per_case", 0)),
+                                        str(item.get("actual_cases", 0)),
+                                        str(item.get("status", "未點收")),
+                                        str(current_doc.get("archived_order", "False"))
+                                    ])
+
+                                # 4. 🛑【無差別空值攔截盾】安全防禦
+                                if not final_flattened_rows_list:
+                                    raise ValueError("偵測到即將寫入雲端的平鋪名冊資料為空，自動攔截清空動作！")
+
+                                # 5. 🧽 擦乾淨雲端並精準全量射入
+                                manifest_sheet.clear()
+                                values_to_write = [header] + final_flattened_rows_list
+                                    
                                 try:
                                     manifest_sheet.update(values_to_write, "A1")
-                                except:
-                                    try:
-                                        manifest_sheet.update(range_name="A1", values=values_to_write)
-                                    except:
-                                        manifest_sheet.append_rows(values_to_write)
+                                except Exception:
+                                    manifest_sheet.update(range_name="A1", values=values_to_write)
+                                        
+                                # 存檔落盤，並標記下一輪快取需要重新刷新
+                                db["manifest_by_order"][selected_order]["items"] = current_manifest_pool
+                                save_data(db)
+                                st.session_state["need_refresh_cloud_cache"] = True
                                             
                             except Exception as cloud_err:
-                                st.error(f"雲端持久化失敗: {cloud_err}")
+                                st.error(f"❌ 雲端持久化失敗: {cloud_err}")
+                            # ==================================================================
+
 
                             # ==================================================================
                             # 🌟【全新修正：欄位深度自動清空與本地同步】在 Rerun 前夕，強行清除與存檔 🌟
