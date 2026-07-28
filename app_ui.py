@@ -2024,96 +2024,82 @@ if is_tab2_active:
                 archive_btn_label = " 完成本單驗貨（移至歷史存檔）" if st.session_state.lang == "zh" else " 検収完了（履歴に移動）"
                 if st.button(archive_btn_label, type="primary", use_container_width=True, key=f"archive_order_btn_{selected_order}"):
                     try:
-                        # 🎯 1. 本地硬碟先標記為結案
+                        # 🎯 1. 本地硬碟先標記為結案並落盤
                         db["manifest_by_order"][selected_order]["archived_order"] = True
+                        save_data(db)
                         
                         # 🎯 2. 連線 Google 雲端的兩個獨立分頁
                         manifest_sheet = get_google_sheet("Manifest")
-                        archive_sheet = get_google_sheet("Archive")  # 🌟 請確保 Google Sheet 已手動建立此分頁
+                        archive_sheet = get_google_sheet("Archive")  # 🌟 請確保 Google Sheet 已有 Archive 分頁
                         
                         # 定義標準的雲端 15 欄欄位
                         header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
                         
-                        rows_to_archive = []      # 準備搬移到 Archive 分頁的資料
-                        rows_to_keep_manifest = [] # 準備繼續留在 Manifest 分頁（其他未結案單據）的資料
+                        rows_to_archive = []
                         
-                        # A. 提取目前畫面上這張單據最完美的最新資料（準備搬移到歷史存檔）
-                        for row_dict in receiving_report_list:
-                            rows_to_archive.append([
-                                str(selected_order),                                            # order_no
-                                str(current_info.get("vendor", "-")),                          # vendor
-                                str(current_info.get("expected_delivery", "-")),                # expected_delive
-                                str(current_info.get("operator", "-")),                        # operator
-                                str(row_dict.get(jan_col, "-")),                                # jan_code
-                                str(row_dict.get(name_col if 'name_col' in locals() else '商品名稱', "-")), # name_ja
-                                str(row_dict.get(lot_col if 'lot_col' in locals() else '批次號', "")),     # lot_no
-                                str(row_dict.get(exp_col if 'exp_col' in locals() else '有效期限', "")),     # expiry
-                                str(row_dict.get(req_col, 0)),                                  # expected_count
-                                str(row_dict.get(act_col, 0)),                                  # actual_count
-                                str(row_dict.get("expected_cases", 0)),                         # expected_cases
-                                str(row_dict.get("pcs_per_case", 0)),                           # pcs_per_case
-                                str(row_dict.get("actual_cases", 0)),                           # actual_cases
-                                "驗貨完畢",                                                     # status
-                                "True"                                                         # archived_order
-                            ])
+                        # 🚀 核心大改進：拋棄原始 List，直接拿當前畫面上絕對正確、已經排序好的 df_receiving DataFrame 來遍歷！
+                        # 依據您提供的欄位變數（jan_col, status_col, req_col, act_col），以及 DataFrame 內建的 columns 順序抓取
+                        for _, row in df_receiving.iterrows():
                             
-                        # B. 收集「其他單據」的歷史資料，讓它們繼續安全地留在原來的 Manifest
-                        for other_order, other_doc in db["manifest_by_order"].items():
-                            if other_order == selected_order:
-                                continue # 跳過當前這張單據，因為它要去 Archive 了
-                                
-                            other_info = other_doc.get("info", {})
-                            other_items = other_doc.get("items", {})
-                            for o_jan, o_item in other_items.items():
-                                rows_to_keep_manifest.append([
-                                    str(other_order),
-                                    str(other_info.get("vendor", "-")),
-                                    str(other_info.get("expected_delivery", "-")),
-                                    str(other_info.get("operator", "-")),
-                                    str(o_jan),
-                                    str(o_item.get("name_ja", "-")),
-                                    str(o_item.get("lot_no", "")),
-                                    str(o_item.get("expiry", "")),
-                                    str(o_item.get("expected_count", 0)),
-                                    str(o_item.get("actual_count", 0)),
-                                    str(o_item.get("expected_cases", 0)),
-                                    str(o_item.get("pcs_per_case", 0)),
-                                    str(o_item.get("actual_cases", 0)),
-                                    str(o_item.get("status", "未點收")),
-                                    str(other_doc.get("archived_order", "False"))
-                                ])
+                            # 為了精準防呆，我們自動抓取對應欄位的值，如果找不到就填 "-"
+                            v_jan = str(row.get(jan_col, "-")).strip()
+                            # 自動猜測其餘可能的手填欄位名稱，或直接留空
+                            v_name = str(row.get("商品名稱", row.get("name_ja", row.get(df_receiving.columns[5], "-"))))
+                            v_lot = str(row.get("批次號", row.get("lot_no", row.get(df_receiving.columns[6], "")))).strip()
+                            v_exp = str(row.get("有效期限", row.get("expiry", row.get(df_receiving.columns[7], "")))).strip()
+                            
+                            v_req = int(row.get(req_col, 0))
+                            v_act = int(row.get(act_col, 0))
+                            v_status = str(row.get(status_col, "驗貨完畢"))
+                            
+                            # 箱數相關欄位安全抓取
+                            v_exp_cases = str(row.get("expected_cases", row.get("預計箱數", 0)))
+                            v_pcs_case = str(row.get("pcs_per_case", row.get("箱入數", 0)))
+                            v_act_cases = str(row.get("actual_cases", row.get("實際箱數", 0)))
 
-                        # 🎯 3. 執行雲端持久化分流操作
-                        # [動作一] 將當前單據的最新完美數據，精準追加（Append）到 Archive 分頁的最底部
+                            # 🌟 精準填入 15 個格子，位置絕對一字不差對齊標題列！
+                            rows_to_archive.append([
+                                str(selected_order).strip(),                     # 1. order_no
+                                str(current_info.get("vendor", "-")),           # 2. vendor
+                                str(current_info.get("expected_delivery", "-")), # 3. expected_delive
+                                str(current_info.get("operator", "-")),         # 4. operator
+                                v_jan,                                           # 5. jan_code
+                                v_name,                                          # 6. name_ja
+                                v_lot,                                           # 7. lot_no
+                                v_exp,                                           # 8. expiry
+                                str(v_req),                                      # 9. expected_count
+                                str(v_act),                                      # 10. actual_count
+                                str(v_exp_cases),                                # 11. expected_cases
+                                str(v_pcs_case),                                 # 12. pcs_per_case
+                                str(v_act_cases),                                # 13. actual_cases
+                                v_status,                                        # 14. status
+                                "True"                                           # 15. archived_order
+                            ])
+
+                        # 🎯 3. 執行雲端持久化：直接追加寫入 Archive 歷史分頁最底部
                         if rows_to_archive:
-                            try:
-                                archive_sheet.append_rows(rows_to_archive, value_input_option="USER_ENTERED")
-                            except Exception:
-                                # 備援寫法：防止部分 gspread 版本不支援 append_rows
-                                current_archive_values = archive_sheet.get_all_values()
-                                next_row = len(current_archive_values) + 1
-                                archive_sheet.update(f"A{next_row}", rows_to_archive)
+                            archive_sheet.append_rows(rows_to_archive, value_input_option="USER_ENTERED")
 
-                        # [動作二] 🧽 清空原本的 Manifest，只寫回「還留在場上（其他未結案）」的單據
-                        manifest_sheet.clear()
-                        values_to_manifest = [header] + rows_to_keep_manifest
-                        try:
-                            manifest_sheet.update(values_to_manifest, "A1")
-                        except Exception:
-                            manifest_sheet.update(range_name="A1", values=values_to_manifest)
-
-                        # 🎯 4. 本地硬碟硬保存落盤
-                        save_data(db)
+                        # 🎯 4. 解決未移除問題：直接從 Manifest 中，將單號為 selected_order 的行數「精準刪除」
+                        # 這樣做最安全，不用覆寫整張大表，速度快又絕對能移除乾淨！
+                        all_manifest_values = manifest_sheet.get_all_values()
+                        
+                        # 倒過來刪除行數（從底部往上刪，才不會因為前面的行數被刪掉導致後面的行號改變）
+                        for row_idx in range(len(all_manifest_values) - 1, 0, -1):
+                            current_row = all_manifest_values[row_idx]
+                            if current_row and str(current_row[0]).strip() == str(selected_order).strip():
+                                manifest_sheet.delete_rows(row_idx + 1) # gspread 的行號從 1 開始算
                         
                         # 🎯 5. 告訴快取機制下一輪需要重新整理，並強制重新渲染
                         st.session_state["need_refresh_cloud_cache"] = True
-                        st.session_state["pda_success_msg"] = f" 單據 {selected_order} 已完美移至雲端【Archive】歷史存檔分頁，並從現有清單中移除！"
+                        st.session_state["pda_success_msg"] = f"🎉 單據 {selected_order} 已完美移至雲端【Archive】歷史存檔分頁，並已從【Manifest】清單中精準移除！"
                         st.rerun()
                         
                     except Exception as err:
-                        st.error(f" 結案歸檔失敗（資料已攔截未丟失），請確認 Google Sheet 是否已建立名為 Archive 的分頁。錯誤原因: {err}")
+                        st.error(f"❌ 結案歸檔失敗: {err}")
             else:
                 st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
+
 
 
 # ==========================================
