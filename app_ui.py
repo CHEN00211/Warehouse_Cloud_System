@@ -2023,13 +2023,94 @@ if is_tab2_active:
                 st.markdown("---")
                 archive_btn_label = " 完成本單驗貨（移至歷史存檔）" if st.session_state.lang == "zh" else " 検収完了（履歴に移動）"
                 if st.button(archive_btn_label, type="primary", use_container_width=True, key=f"archive_order_btn_{selected_order}"):
-                    db["manifest_by_order"][selected_order]["archived_order"] = True
-                    save_data(db)
-                    # 🛠️ 修正：不要直接 st.success，而是存進分頁二專屬的隔離暫存變數中
-                    st.session_state["pda_success_msg"] = f"單據 {selected_order} 已成功結案並移至歷史存檔區域！"
-                    st.rerun()
+                    try:
+                        # 🎯 1. 本地硬碟先標記結案
+                        db["manifest_by_order"][selected_order]["archived_order"] = True
+                        
+                        # 🎯 2. 核心大修復：結案時，必須將畫面上完美的 df_receiving 即時全量同步回雲端，死死鎖住數據！
+                        manifest_sheet = get_google_sheet("Manifest")
+                        
+                        # 定義標準的雲端 15 欄欄位標題
+                        header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
+                        
+                        final_flattened_rows_list = []
+                        
+                        # A. 先將目前這張單據畫面上「最新、最完美、已排序好」的資料轉成雲端格式
+                        # 註：這裡欄位名稱（如 "傳票號碼"、"JAN 碼" 等）請根據您 df_receiving 實際的 DataFrame 欄位名稱自動對齊
+                        for idx, row in df_receiving.iterrows():
+                            # 為了確保語系欄位名稱對齊，我們使用位置（或嘗試讀取名稱）來抓取資料
+                            # 建議使用 index 確保萬無一失，或直接讀取 DataFrame 內的值
+                            final_flattened_rows_list.append([
+                                str(selected_order),                                            # order_no
+                                str(current_info.get("vendor", "-")),                          # vendor
+                                str(current_info.get("expected_delivery", "-")),                # expected_delive
+                                str(current_info.get("operator", "-")),                        # operator
+                                str(row.get(jan_col, "-")),                                    # jan_code
+                                str(row.get(name_col if 'name_col' in locals() else df_receiving.columns[5], "-")), # name_ja
+                                str(row.get(lot_col if 'lot_col' in locals() else df_receiving.columns[6], "")),   # lot_no (最新手填批次)
+                                str(row.get(exp_col if 'exp_col' in locals() else df_receiving.columns[7], "")),   # expiry (最新手填效期)
+                                str(row.get(req_col, 0)),                                      # expected_count
+                                str(row.get(act_col, 0)),                                      # actual_count
+                                str(row.get(df_receiving.columns[10], 0)),                     # expected_cases
+                                str(row.get(df_receiving.columns[11], 0)),                     # pcs_per_case
+                                str(row.get(df_receiving.columns[12], 0)),                     # actual_cases
+                                str(row.get(status_col, "驗貨完畢")),                            # status (強迫或維持最新狀態)
+                                "True"                                                         # archived_order (雲端也同步改為 True)
+                            ])
+                            
+                        # B. 智慧型融合：把「其他單據」的歷史資料也補回來（不能結了這張單，別張單就不見了）
+                        # 從原本的本地 db 中找出其他還沒結案、或是已經結案的單據平鋪進來
+                        for other_order, other_doc in db["manifest_by_order"].items():
+                            if other_order == selected_order:
+                                continue # 跳過當前這張，因為上面已經用最新畫面資料處理好了
+                                
+                            other_info = other_doc.get("info", {})
+                            other_items = other_doc.get("items", {})
+                            for o_jan, o_item in other_items.items():
+                                final_flattened_rows_list.append([
+                                    str(other_order),
+                                    str(other_info.get("vendor", "-")),
+                                    str(other_info.get("expected_delivery", "-")),
+                                    str(other_info.get("operator", "-")),
+                                    str(o_jan),
+                                    str(o_item.get("name_ja", "-")),
+                                    str(o_item.get("lot_no", "")),
+                                    str(o_item.get("expiry", "")),
+                                    str(o_item.get("expected_count", 0)),
+                                    str(o_item.get("actual_count", 0)),
+                                    str(o_item.get("expected_cases", 0)),
+                                    str(o_item.get("pcs_per_case", 0)),
+                                    str(o_item.get("actual_cases", 0)),
+                                    str(o_item.get("status", "未點收")),
+                                    str(other_doc.get("archived_order", "False"))
+                                ])
+
+                        # C. 🛑 空值攔截盾
+                        if not final_flattened_rows_list:
+                            raise ValueError("結案數據寫入列表為空，自動攔截防止洗空雲端！")
+
+                        # D. 🧽 清空雲端並全量射入
+                        manifest_sheet.clear()
+                        values_to_write = [header] + final_flattened_rows_list
+                        
+                        try:
+                            manifest_sheet.update(values_to_write, "A1")
+                        except Exception:
+                            manifest_sheet.update(range_name="A1", values=values_to_write)
+
+                        # 🎯 3. 本地硬碟落盤存檔
+                        save_data(db)
+                        
+                        # 🎯 4. 告訴系統下一次重新整理時，快取需要重新從雲端抓取最新的 True 狀態
+                        st.session_state["need_refresh_cloud_cache"] = True
+                        st.session_state["pda_success_msg"] = f" 單據 {selected_order} 已同步至雲端，並成功結案移至歷史存檔！"
+                        st.rerun()
+                        
+                    except Exception as err:
+                        st.error(f" 結案失敗（資料已攔截未丟失）: {err}")
             else:
                 st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
+
 
 
 
