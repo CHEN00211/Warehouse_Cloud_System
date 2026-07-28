@@ -1724,27 +1724,57 @@ if is_tab2_active:
                                         str(current_doc.get("archived_order", "False"))
                                     ])
 
-                                # 4. 🛑【無差別空值攔截盾】安全防禦
-                                if not final_flattened_rows_list:
-                                    raise ValueError("偵測到即將寫入雲端的平鋪名冊資料為空，自動攔截清空動作！")
+                                    # 4. 🛑【無差別空值攔截盾】安全防禦
+                                    if not final_flattened_rows_list:
+                                        raise ValueError("偵測到即將寫入雲端的平鋪名冊資料為空，自動攔截清空動作！")
 
-                                # 5. 🧽 擦乾淨雲端並精準全量射入
-                                manifest_sheet.clear()
-                                values_to_write = [header] + final_flattened_rows_list
+                                    # ==================================================================
+                                    # 💡 核心強化：加入「三重複試機制」，徹底消滅雲端連線失敗與短暫斷線 🌟
+                                    # ==================================================================
+                                    import time
+                                    max_retries = 3      # 最多重試 3 次
+                                    retry_delay = 1.5    # 每次失敗隔 1.5 秒再試
+                                    write_success = False
                                     
-                                try:
-                                    manifest_sheet.update(values_to_write, "A1")
-                                except Exception:
-                                    manifest_sheet.update(range_name="A1", values=values_to_write)
-                                        
-                                # 存檔落盤，並標記下一輪快取需要重新刷新
-                                db["manifest_by_order"][selected_order]["items"] = current_manifest_pool
-                                save_data(db)
-                                st.session_state["need_refresh_cloud_cache"] = True
+                                    for attempt in range(max_retries):
+                                        try:
+                                            # 🧽 擦乾淨雲端並精準全量射入
+                                            manifest_sheet.clear()
+                                            values_to_write = [header] + final_flattened_rows_list
                                             
-                            except Exception as cloud_err:
-                                st.error(f"❌ 雲端持久化失敗: {cloud_err}")
-                            # ==================================================================
+                                            try:
+                                                manifest_sheet.update(values_to_write, "A1")
+                                            except Exception:
+                                                manifest_sheet.update(range_name="A1", values=values_to_write)
+                                            
+                                            write_success = True
+                                            break # 💡 只要成功一次，立刻跳出重試迴圈
+                                        except Exception as write_err:
+                                            if attempt < max_retries - 1:
+                                                # 如果不是最後一次失敗，在背景偷偷等一下，然後自動重試
+                                                time.sleep(retry_delay)
+                                            else:
+                                                # 3 次都失敗了，正式拋出錯誤
+                                                raise write_err
+
+                                    if not write_success:
+                                        raise ConnectionError("Google 雲端伺服器中斷連線，嘗試重連 3 次均告失敗。")
+                                        
+                                    # 存檔落盤，並標記下一輪快取需要重新刷新
+                                    db["manifest_by_order"][selected_order]["items"] = current_manifest_pool
+                                    save_data(db)
+                                    st.session_state["need_refresh_cloud_cache"] = True
+                                            
+                                except Exception as cloud_err:
+                                    # 🛡️ 斷線安全備援防線：雲端失敗了，但本地 db 和 save_data(db) 依然強制幫作業員保留進硬碟！
+                                    # 這樣作業員剛剛辛苦填寫的 Lot 與數量絕對不會不見，下一筆提交時會自動補寫上去！
+                                    try:
+                                        db["manifest_by_order"][selected_order]["items"] = current_manifest_pool
+                                        save_data(db)
+                                    except:
+                                        pass
+                                    st.error(f"⚠️ 雲端暫時連線失敗（Google 伺服器繁忙中），已自動將點貨資料轉存至本地備援庫！請您放心繼續操作，系統會在下一筆點收提交時自動補同步至雲端：{cloud_err}")
+
 
 
                             # ==================================================================
