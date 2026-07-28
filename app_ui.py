@@ -1258,8 +1258,7 @@ if is_tab2_active:
                 if clean_target_jan:
                     # 1. ⚡ 實時向最新的雲端大表（Google Sheet）核對當前單據的最新點收現狀
                     try:
-                        manifest_sheet = get_google_sheet("Manifest")
-                        cloud_values = st.session_state["cloud_manifest_cache"]
+                        cloud_values = st.session_state.get("cloud_manifest_cache", [])
                         header_cols = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
                         
                         cloud_item = None
@@ -1271,7 +1270,7 @@ if is_tab2_active:
                                     row += [""] * (len(header_cols) - len(row))
                                 
                                 # 如果單號相符 且 JAN 碼相符
-                                if str(row[0]).strip() == str(selected_order).strip() and str(row[4]).strip() == clean_target_jan:
+                                if len(row) > 4 and str(row[0]).strip() == str(selected_order).strip() and str(row[4]).strip() == clean_target_jan:
                                     cloud_item = row
                                     # 💡 檢查這個品項在雲端是不是已經被點收過了
                                     if str(row[13]).strip() in ["決收點貨", "驗貨完畢", "數量有差異", "検収完了", "数量差異あり"]:
