@@ -10,6 +10,7 @@ st.set_page_config(page_title="到貨驗收系統", layout="wide")
 st.title("到貨驗收系統")
 
 # 2. 定義連線函式
+@st.cache_resource
 def get_google_sheet(sheet_name):
     # 確保 Secrets 設定在 Streamlit Cloud 中
     creds = st.secrets["gcp_service_account"]
