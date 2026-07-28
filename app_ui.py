@@ -2092,11 +2092,11 @@ if is_tab2_active:
                         
                         # 🎯 5. 告訴快取機制下一輪需要重新整理，並強制重新渲染
                         st.session_state["need_refresh_cloud_cache"] = True
-                        st.session_state["pda_success_msg"] = f"🎉 單據 {selected_order} 已完美移至雲端【Archive】歷史存檔分頁，並已從【Manifest】清單中精準移除！"
+                        st.session_state["pda_success_msg"] = f"單據 {selected_order} 已移至雲端【Archive】歷史存檔分頁，並已從【Manifest】清單中移除！"
                         st.rerun()
                         
                     except Exception as err:
-                        st.error(f"❌ 結案歸檔失敗: {err}")
+                        st.error(f"結案歸檔失敗: {err}")
             else:
                 st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
 
