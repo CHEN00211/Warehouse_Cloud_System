@@ -769,39 +769,49 @@ if is_tab1_active:
                     if all(col in df_upload.columns for col in required_cols):
                         
                         # ==================================================================
-                        # 🌟 終極修正：雲端永續計數器（徹底解決網頁重整、全刪資料導致 001 的問題）🌟
+                        # 🌟 終極修正：雲端永續計數器（跨天流水號自動歸零 001 完美版）🌟
                         # ==================================================================
                         today_mmdd = datetime.date.today().strftime("%m%d")
-                        current_highest_seq = 0
+                        new_seq_num = 1  # 預設序號為 1
                         
                         try:
-                            # 1. 連線到我們剛剛建立的雲端專屬設定工作表
+                            # 1. 連線到雲端專屬設定工作表
                             settings_sheet = get_google_sheet("System_Settings")
                             
-                            # 2. 讀取目前儲存在雲端的絕對歷史最大序號 (讀取 A1 儲存格)
-                            cell_value = settings_sheet.acell("A1").value
-                            if cell_value and str(cell_value).isdigit():
-                                current_highest_seq = int(cell_value)
+                            # 2. 同時讀取 A1 (歷史序號) 與 B1 (歷史發號日期)
+                            # 為了減少 API 敲擊次數，我們直接抓取第一列前兩個儲存格的值
+                            first_row = settings_sheet.row_values(1)
+                            
+                            cloud_seq = first_row[0] if len(first_row) > 0 else ""
+                            cloud_date = first_row[1] if len(first_row) > 1 else ""
+                            
+                            # 3. 🎯 【核心跨天判定盾】
+                            if cloud_date == today_mmdd:
+                                # 如果雲端記錄的日期就是今天 ➔ 序號繼續累加
+                                if cloud_seq and str(cloud_seq).isdigit():
+                                    new_seq_num = int(cloud_seq) + 1
+                            else:
+                                # 💡 跨天了！或者是全新的一天 ➔ 序號強制重置為 1
+                                new_seq_num = 1
+                                
                         except Exception as settings_err:
-                            # 如果讀取失敗，安全降級使用 0
-                            current_highest_seq = 0
+                            # 如果讀取失敗，安全降級使用 1
+                            new_seq_num = 1
 
-                        # 3. 永遠在雲端歷史最大值的基礎上 + 1 (管你網頁怎麼重整、Manifest 怎麼刪，這裡絕不回頭)
-                        new_seq_num = current_highest_seq + 1
-                        
                         try:
-                            # 4. 立刻把最新吐出來的號碼，強行寫回雲端 A1 卡死，幫下一張單據排隊
-                            settings_sheet.update("A1", [[new_seq_num]])
-                        except Exception as update_settings_err:
-                            # 舊版 gspread 備援語法
+                            # 4. 立刻把最新吐出來的 [序號, 今日日期] 一併寫回雲端 A1 與 B1 鎖死
                             try:
-                                settings_sheet.update(range_name="A1", values=[[new_seq_num]])
-                            except:
-                                pass
+                                settings_sheet.update("A1:B1", [[new_seq_num, today_mmdd]])
+                            except Exception:
+                                # 舊版 gspread 備援語法
+                                settings_sheet.update(range_name="A1:B1", values=[[new_seq_num, today_mmdd]])
+                        except Exception as update_settings_err:
+                            pass
                         
-                        # 5. 結合今日日期，組裝成絕對唯一的遞增單號
+                        # 5. 結合今日日期，組裝成絕對唯一的遞增單號（例如：0728001）
                         auto_order_no = f"{today_mmdd}{new_seq_num:03d}"
                         # ==================================================================
+
                         
                         current_time_str = datetime.datetime.now().strftime("%Y/%m/%d")
                         
