@@ -2024,50 +2024,48 @@ if is_tab2_active:
                 archive_btn_label = " 完成本單驗貨（移至歷史存檔）" if st.session_state.lang == "zh" else " 検収完了（履歴に移動）"
                 if st.button(archive_btn_label, type="primary", use_container_width=True, key=f"archive_order_btn_{selected_order}"):
                     try:
-                        # 🎯 1. 本地硬碟先標記結案
+                        # 🎯 1. 本地硬碟先標記為結案
                         db["manifest_by_order"][selected_order]["archived_order"] = True
                         
-                        # 🎯 2. 核心大修復：結案時，必須將畫面上完美的 df_receiving 即時全量同步回雲端，死死鎖住數據！
+                        # 🎯 2. 連線 Google 雲端的兩個獨立分頁
                         manifest_sheet = get_google_sheet("Manifest")
+                        archive_sheet = get_google_sheet("Archive")  # 🌟 請確保 Google Sheet 已手動建立此分頁
                         
-                        # 定義標準的雲端 15 欄欄位標題
+                        # 定義標準的雲端 15 欄欄位
                         header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
                         
-                        final_flattened_rows_list = []
+                        rows_to_archive = []      # 準備搬移到 Archive 分頁的資料
+                        rows_to_keep_manifest = [] # 準備繼續留在 Manifest 分頁（其他未結案單據）的資料
                         
-                        # A. 先將目前這張單據畫面上「最新、最完美、已排序好」的資料轉成雲端格式
-                        # 註：這裡欄位名稱（如 "傳票號碼"、"JAN 碼" 等）請根據您 df_receiving 實際的 DataFrame 欄位名稱自動對齊
-                        for idx, row in df_receiving.iterrows():
-                            # 為了確保語系欄位名稱對齊，我們使用位置（或嘗試讀取名稱）來抓取資料
-                            # 建議使用 index 確保萬無一失，或直接讀取 DataFrame 內的值
-                            final_flattened_rows_list.append([
+                        # A. 提取目前畫面上這張單據最完美的最新資料（準備搬移到歷史存檔）
+                        for row_dict in receiving_report_list:
+                            rows_to_archive.append([
                                 str(selected_order),                                            # order_no
                                 str(current_info.get("vendor", "-")),                          # vendor
                                 str(current_info.get("expected_delivery", "-")),                # expected_delive
                                 str(current_info.get("operator", "-")),                        # operator
-                                str(row.get(jan_col, "-")),                                    # jan_code
-                                str(row.get(name_col if 'name_col' in locals() else df_receiving.columns[5], "-")), # name_ja
-                                str(row.get(lot_col if 'lot_col' in locals() else df_receiving.columns[6], "")),   # lot_no (最新手填批次)
-                                str(row.get(exp_col if 'exp_col' in locals() else df_receiving.columns[7], "")),   # expiry (最新手填效期)
-                                str(row.get(req_col, 0)),                                      # expected_count
-                                str(row.get(act_col, 0)),                                      # actual_count
-                                str(row.get(df_receiving.columns[10], 0)),                     # expected_cases
-                                str(row.get(df_receiving.columns[11], 0)),                     # pcs_per_case
-                                str(row.get(df_receiving.columns[12], 0)),                     # actual_cases
-                                str(row.get(status_col, "驗貨完畢")),                            # status (強迫或維持最新狀態)
-                                "True"                                                         # archived_order (雲端也同步改為 True)
+                                str(row_dict.get(jan_col, "-")),                                # jan_code
+                                str(row_dict.get(name_col if 'name_col' in locals() else '商品名稱', "-")), # name_ja
+                                str(row_dict.get(lot_col if 'lot_col' in locals() else '批次號', "")),     # lot_no
+                                str(row_dict.get(exp_col if 'exp_col' in locals() else '有效期限', "")),     # expiry
+                                str(row_dict.get(req_col, 0)),                                  # expected_count
+                                str(row_dict.get(act_col, 0)),                                  # actual_count
+                                str(row_dict.get("expected_cases", 0)),                         # expected_cases
+                                str(row_dict.get("pcs_per_case", 0)),                           # pcs_per_case
+                                str(row_dict.get("actual_cases", 0)),                           # actual_cases
+                                "驗貨完畢",                                                     # status
+                                "True"                                                         # archived_order
                             ])
                             
-                        # B. 智慧型融合：把「其他單據」的歷史資料也補回來（不能結了這張單，別張單就不見了）
-                        # 從原本的本地 db 中找出其他還沒結案、或是已經結案的單據平鋪進來
+                        # B. 收集「其他單據」的歷史資料，讓它們繼續安全地留在原來的 Manifest
                         for other_order, other_doc in db["manifest_by_order"].items():
                             if other_order == selected_order:
-                                continue # 跳過當前這張，因為上面已經用最新畫面資料處理好了
+                                continue # 跳過當前這張單據，因為它要去 Archive 了
                                 
                             other_info = other_doc.get("info", {})
                             other_items = other_doc.get("items", {})
                             for o_jan, o_item in other_items.items():
-                                final_flattened_rows_list.append([
+                                rows_to_keep_manifest.append([
                                     str(other_order),
                                     str(other_info.get("vendor", "-")),
                                     str(other_info.get("expected_delivery", "-")),
@@ -2085,33 +2083,37 @@ if is_tab2_active:
                                     str(other_doc.get("archived_order", "False"))
                                 ])
 
-                        # C. 🛑 空值攔截盾
-                        if not final_flattened_rows_list:
-                            raise ValueError("結案數據寫入列表為空，自動攔截防止洗空雲端！")
+                        # 🎯 3. 執行雲端持久化分流操作
+                        # [動作一] 將當前單據的最新完美數據，精準追加（Append）到 Archive 分頁的最底部
+                        if rows_to_archive:
+                            try:
+                                archive_sheet.append_rows(rows_to_archive, value_input_option="USER_ENTERED")
+                            except Exception:
+                                # 備援寫法：防止部分 gspread 版本不支援 append_rows
+                                current_archive_values = archive_sheet.get_all_values()
+                                next_row = len(current_archive_values) + 1
+                                archive_sheet.update(f"A{next_row}", rows_to_archive)
 
-                        # D. 🧽 清空雲端並全量射入
+                        # [動作二] 🧽 清空原本的 Manifest，只寫回「還留在場上（其他未結案）」的單據
                         manifest_sheet.clear()
-                        values_to_write = [header] + final_flattened_rows_list
-                        
+                        values_to_manifest = [header] + rows_to_keep_manifest
                         try:
-                            manifest_sheet.update(values_to_write, "A1")
+                            manifest_sheet.update(values_to_manifest, "A1")
                         except Exception:
-                            manifest_sheet.update(range_name="A1", values=values_to_write)
+                            manifest_sheet.update(range_name="A1", values=values_to_manifest)
 
-                        # 🎯 3. 本地硬碟落盤存檔
+                        # 🎯 4. 本地硬碟硬保存落盤
                         save_data(db)
                         
-                        # 🎯 4. 告訴系統下一次重新整理時，快取需要重新從雲端抓取最新的 True 狀態
+                        # 🎯 5. 告訴快取機制下一輪需要重新整理，並強制重新渲染
                         st.session_state["need_refresh_cloud_cache"] = True
-                        st.session_state["pda_success_msg"] = f" 單據 {selected_order} 已同步至雲端，並成功結案移至歷史存檔！"
+                        st.session_state["pda_success_msg"] = f" 單據 {selected_order} 已完美移至雲端【Archive】歷史存檔分頁，並從現有清單中移除！"
                         st.rerun()
                         
                     except Exception as err:
-                        st.error(f" 結案失敗（資料已攔截未丟失）: {err}")
+                        st.error(f" 結案歸檔失敗（資料已攔截未丟失），請確認 Google Sheet 是否已建立名為 Archive 的分頁。錯誤原因: {err}")
             else:
                 st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
-
-
 
 
 # ==========================================
