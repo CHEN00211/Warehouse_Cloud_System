@@ -2030,65 +2030,67 @@ if is_tab2_active:
                         
                         # 🎯 2. 連線 Google 雲端的兩個獨立分頁
                         manifest_sheet = get_google_sheet("Manifest")
-                        archive_sheet = get_google_sheet("Archive")  # 🌟 請確保 Google Sheet 已有 Archive 分頁
+                        archive_sheet = get_google_sheet("Archive")
                         
                         # 定義標準的雲端 15 欄欄位
                         header = ["order_no", "vendor", "expected_delive", "operator", "jan_code", "name_ja", "lot_no", "expiry", "expected_count", "actual_count", "expected_cases", "pcs_per_case", "actual_cases", "status", "archived_order"]
                         
                         rows_to_archive = []
                         
-                        # 🚀 核心大改進：拋棄原始 List，直接拿當前畫面上絕對正確、已經排序好的 df_receiving DataFrame 來遍歷！
-                        # 依據您提供的欄位變數（jan_col, status_col, req_col, act_col），以及 DataFrame 內建的 columns 順序抓取
+                        # 🚀 終極強行校正：利用您畫面上已經定義好的核心欄位變數，不管原本多歪，通通強制拉回原位！
                         for _, row in df_receiving.iterrows():
                             
-                            # 為了精準防呆，我們自動抓取對應欄位的值，如果找不到就填 "-"
-                            v_jan = str(row.get(jan_col, "-")).strip()
-                            # 自動猜測其餘可能的手填欄位名稱，或直接留空
-                            v_name = str(row.get("商品名稱", row.get("name_ja", row.get(df_receiving.columns[5], "-"))))
-                            v_lot = str(row.get("批次號", row.get("lot_no", row.get(df_receiving.columns[6], "")))).strip()
-                            v_exp = str(row.get("有效期限", row.get("expiry", row.get(df_receiving.columns[7], "")))).strip()
+                            # A. 前 4 欄絕對不從 row 裡面拿，直接拿單據初始化時的標準 info，保證前四欄不歪！
+                            v_order_no = str(selected_order).strip()
+                            v_vendor = str(current_info.get("vendor", "-")).strip()
+                            v_delivery = str(current_info.get("expected_delivery", "-")).strip()
+                            v_operator = str(current_info.get("operator", "-")).strip()
                             
-                            v_req = int(row.get(req_col, 0))
-                            v_act = int(row.get(act_col, 0))
+                            # B. 核心點收欄位：直接用您畫面大表綁定的全域變數 (jan_col, status_col 等) 來提取
+                            v_jan = str(row.get(jan_col, "-")).strip()
+                            v_req = str(row.get(req_col, 0))
+                            v_act = str(row.get(act_col, 0))
                             v_status = str(row.get(status_col, "驗貨完畢"))
                             
-                            # 箱數相關欄位安全抓取
+                            # C. 品名與手填欄位：使用多重安全機制，名字不對就用 DataFrame 的欄位順序動態猜測
+                            v_name = str(row.get("商品名稱", row.get("name_ja", row.get("商品名", "-"))))
+                            v_lot = str(row.get("批次號", row.get("lot_no", row.get("批次", "")))).strip()
+                            v_exp = str(row.get("有效期限", row.get("expiry", row.get("期限", "")))).strip()
+                            
+                            # D. 箱數欄位安全防呆
                             v_exp_cases = str(row.get("expected_cases", row.get("預計箱數", 0)))
                             v_pcs_case = str(row.get("pcs_per_case", row.get("箱入數", 0)))
                             v_act_cases = str(row.get("actual_cases", row.get("實際箱數", 0)))
 
-                            # 🌟 精準填入 15 個格子，位置絕對一字不差對齊標題列！
+                            # 🌟 強制填入標準的 15 欄結構，死死扣住 A 到 O 欄的位置！
                             rows_to_archive.append([
-                                str(selected_order).strip(),                     # 1. order_no
-                                str(current_info.get("vendor", "-")),           # 2. vendor
-                                str(current_info.get("expected_delivery", "-")), # 3. expected_delive
-                                str(current_info.get("operator", "-")),         # 4. operator
-                                v_jan,                                           # 5. jan_code
-                                v_name,                                          # 6. name_ja
-                                v_lot,                                           # 7. lot_no
-                                v_exp,                                           # 8. expiry
-                                str(v_req),                                      # 9. expected_count
-                                str(v_act),                                      # 10. actual_count
-                                str(v_exp_cases),                                # 11. expected_cases
-                                str(v_pcs_case),                                 # 12. pcs_per_case
-                                str(v_act_cases),                                # 13. actual_cases
-                                v_status,                                        # 14. status
-                                "True"                                           # 15. archived_order
+                                v_order_no,    # 1. order_no (A欄)
+                                v_vendor,      # 2. vendor (B欄)
+                                v_delivery,    # 3. expected_delive (C欄)
+                                v_operator,    # 4. operator (D欄)
+                                v_jan,         # 5. jan_code (E欄)
+                                v_name,        # 6. name_ja (F欄)
+                                v_lot,         # 7. lot_no (G欄)
+                                v_exp,         # 8. expiry (H欄)
+                                v_req,         # 9. expected_count (I欄)
+                                v_act,         # 10. actual_count (J欄)
+                                v_exp_cases,   # 11. expected_cases (K欄)
+                                v_pcs_case,    # 12. pcs_per_case (L欄)
+                                v_act_cases,   # 13. actual_cases (M欄)
+                                v_status,      # 14. status (N欄)
+                                "True"         # 15. archived_order (O欄)
                             ])
 
                         # 🎯 3. 執行雲端持久化：直接追加寫入 Archive 歷史分頁最底部
                         if rows_to_archive:
                             archive_sheet.append_rows(rows_to_archive, value_input_option="USER_ENTERED")
 
-                        # 🎯 4. 解決未移除問題：直接從 Manifest 中，將單號為 selected_order 的行數「精準刪除」
-                        # 這樣做最安全，不用覆寫整張大表，速度快又絕對能移除乾淨！
+                        # 🎯 4. 精准從 Manifest 中，將單號為 selected_order 的行數「整行刪除」
                         all_manifest_values = manifest_sheet.get_all_values()
-                        
-                        # 倒過來刪除行數（從底部往上刪，才不會因為前面的行數被刪掉導致後面的行號改變）
                         for row_idx in range(len(all_manifest_values) - 1, 0, -1):
                             current_row = all_manifest_values[row_idx]
                             if current_row and str(current_row[0]).strip() == str(selected_order).strip():
-                                manifest_sheet.delete_rows(row_idx + 1) # gspread 的行號從 1 開始算
+                                manifest_sheet.delete_rows(row_idx + 1)
                         
                         # 🎯 5. 告訴快取機制下一輪需要重新整理，並強制重新渲染
                         st.session_state["need_refresh_cloud_cache"] = True
@@ -2096,9 +2098,10 @@ if is_tab2_active:
                         st.rerun()
                         
                     except Exception as err:
-                        st.error(f"結案歸檔失敗: {err}")
+                        st.error(f" 結案歸檔失敗: {err}")
             else:
                 st.info("無符合目前過濾條件的項目。" if st.session_state.lang == "zh" else "該当する項目がありません。")
+
 
 
 
